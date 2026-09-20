@@ -1,0 +1,1051 @@
+<title>CrispFonter Prototype</title>
+<style>
+:root{
+  --bg:#EEF0F3;--panel:#FFFFFF;--panel-2:#F7F8FA;--ink:#1C1E23;--muted:#6E7480;--faint:#A3A8B3;
+  --line:#D9DCE2;--line-strong:#B9BEC8;
+  --skel:#5B4FCF;--skel-fill:rgba(91,79,207,.22);--handle:#1D9E75;--thick:#D85A30;--thick-bg:rgba(216,90,48,.12);
+  --guide:#4A8ADB;--guide-strong:#2F6FC4;--dot:#C3C7CF;--sel:#DCE9FA;--pix:#1C1E23;--ok:#1F7A4D;--ok-bg:#DDF3E6;
+  --mono:"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1A1C21;--panel:#23262D;--panel-2:#2A2E36;--ink:#E8EAEE;--muted:#9AA0AC;--faint:#6B7180;
+  --line:#343945;--line-strong:#4A5060;--skel:#9C93F5;--skel-fill:rgba(156,147,245,.25);--handle:#4FCFA6;--thick:#F08A62;--thick-bg:rgba(240,138,98,.16);
+  --guide:#6FA5EA;--guide-strong:#8DB8F0;--dot:#454B57;--sel:#2F4463;--pix:#E8EAEE;--ok:#6FD39C;--ok-bg:#1F3A2C;}}
+:root[data-theme="dark"]{
+  --bg:#1A1C21;--panel:#23262D;--panel-2:#2A2E36;--ink:#E8EAEE;--muted:#9AA0AC;--faint:#6B7180;
+  --line:#343945;--line-strong:#4A5060;--skel:#9C93F5;--skel-fill:rgba(156,147,245,.25);--handle:#4FCFA6;--thick:#F08A62;--thick-bg:rgba(240,138,98,.16);
+  --guide:#6FA5EA;--guide-strong:#8DB8F0;--dot:#454B57;--sel:#2F4463;--pix:#E8EAEE;--ok:#6FD39C;--ok-bg:#1F3A2C;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);padding:24px 16px;padding-block:24px}
+.window{max-width:1240px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.10)}
+.toolbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel-2);flex-wrap:wrap}
+.lights{display:flex;gap:6px;margin-right:4px}.lights i{width:11px;height:11px;border-radius:50%;background:var(--line-strong);display:block}
+.title{font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:transparent;color:var(--muted);font:inherit;padding:4px 10px;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}.seg button.on{background:var(--sel);color:var(--ink)}
+.seg button:focus-visible,button:focus-visible{outline:2px solid var(--guide);outline-offset:1px}
+.ctl{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.ctl input[type=range]{width:90px}
+.val{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 5px;min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+.btn{border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer}
+.btn:hover{background:var(--panel-2)}
+.spacer{flex:1}
+.cols{display:grid;grid-template-columns:200px minmax(0,1fr) 400px}
+@media (max-width:1000px){.cols{grid-template-columns:1fr}.side{border-right:0!important;border-bottom:1px solid var(--line)}.right{border-left:0!important;border-top:1px solid var(--line)}}
+.side{border-right:1px solid var(--line);padding:12px}
+.lbl{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px}.lbl:first-child{margin-top:0}
+.glyphs{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;font-family:var(--mono);font-size:13px}
+.glyphs button{border:0;background:transparent;color:var(--faint);padding:3px 0;border-radius:4px;cursor:pointer;font:inherit;font-family:var(--mono)}
+.glyphs button.done{color:var(--ink);background:var(--panel-2)}
+.glyphs button.complete{color:var(--ok);background:var(--ok-bg)}
+.glyphs button.sel{outline:2px solid var(--guide);outline-offset:-1px;color:var(--ink)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;color:var(--muted)}
+.row input[type=number]{width:52px;font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 4px;background:var(--panel);color:var(--ink);text-align:right}
+select{font:inherit;border:1px solid var(--line);border-radius:5px;background:var(--panel);color:var(--ink);padding:3px 6px;max-width:100%}
+.editor{position:relative;background:var(--panel);min-height:560px;display:flex;flex-direction:column}
+#canvasWrap{flex:1;position:relative;overflow:hidden}
+canvas.editor-canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+.status{display:flex;gap:14px;padding:6px 12px;border-top:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:12px;flex-wrap:wrap;align-items:center}
+.status label{display:inline-flex;gap:4px;align-items:center;cursor:pointer}
+.hintbar{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);background:var(--panel-2);color:var(--muted);flex-wrap:wrap}
+.right{border-left:1px solid var(--line);display:flex;flex-direction:column}
+.strip{padding:12px;border-bottom:1px solid var(--line)}
+.rtable{display:grid;grid-template-columns:96px repeat(4,1fr);gap:6px 8px;align-items:end}
+.rtable .h{font-size:11px;color:var(--faint);text-align:center;font-variant-numeric:tabular-nums}
+.rname{font-size:12px;color:var(--ink);line-height:1.25;padding-bottom:4px}.rname small{display:block;color:var(--faint);font-size:11px}
+.cell{display:flex;flex-direction:column;align-items:center;gap:3px}
+.cell canvas{image-rendering:pixelated;border:1px solid var(--line);background:#fff}
+.actualrow{display:flex;gap:14px;align-items:baseline;margin-top:10px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:8px;color:#6E7480;font-size:12px;flex-wrap:wrap}
+.actualrow canvas{image-rendering:auto;vertical-align:bottom}
+.preview{padding:12px;display:flex;flex-direction:column;gap:8px;flex:1}
+.preview textarea{width:100%;min-height:70px;font:12px var(--mono);border:1px solid var(--line);border-radius:6px;padding:6px;background:var(--panel);color:var(--ink);resize:vertical}
+#textCanvas{width:100%;border:1px solid var(--line);border-radius:6px;background:#fff;display:block}
+.help{font-size:12px;color:var(--muted);padding:10px 12px;border-top:1px solid var(--line);background:var(--panel-2)}
+.help kbd{font:11px var(--mono);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--panel);color:var(--ink)}
+.note{max-width:1240px;margin:14px auto 0;color:var(--muted);font-size:12px}
+.spec{max-width:860px;margin:40px auto 0;font-size:14px;line-height:1.55}
+.spec h1{font-size:24px;font-weight:600;margin:0 0 4px}.spec h2{font-size:18px;font-weight:600;margin:32px 0 8px;padding-top:12px;border-top:1px solid var(--line)}.spec h3{font-size:14px;font-weight:600;margin:18px 0 4px}
+.spec p,.spec li{max-width:70ch}.spec ul,.spec ol{padding-left:22px}.spec li{margin:2px 0}
+.spec code{font:12.5px var(--mono);background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.spec pre{font:12px/1.5 var(--mono);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;max-width:100%}
+.spec pre code{background:none;border:0;padding:0}
+.spec table{border-collapse:collapse;font-size:13px;margin:6px 0}.spec td,.spec th{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}.spec th{background:var(--panel-2)}
+.spec .lead{color:var(--muted)}
+</style>
+
+<div class="window" role="application" aria-label="CrispFonter interactive prototype">
+  <div class="toolbar">
+    <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+    <span class="title">Mono.crisp</span>
+    <div class="seg" id="modeSeg" role="tablist" aria-label="Mode">
+      <button data-mode="skeleton" class="on" role="tab">Skeleton</button>
+      <button data-mode="thicken" role="tab">Thicken</button>
+      <button data-mode="hint" role="tab">Hint</button>
+    </div>
+    <span class="ctl">Weight <input id="weight" type="range" min="0.5" max="4" step="0.25" value="1.5" aria-label="Default stroke weight"><span class="val" id="weightVal">1.50</span></span>
+    <span class="ctl">Grid <span class="val">16</span>/em</span>
+    <span class="ctl"><label><input type="checkbox" id="halfSnap"> ½‑grid snap</label></span>
+    <span class="spacer"></span>
+    <button class="btn" id="undoBtn" title="Undo (⌘Z)">Undo</button>
+    <button class="btn" id="clearBtn">Clear glyph</button>
+  </div>
+
+  <div class="cols">
+    <div class="side">
+      <div class="lbl">Glyphs · double‑click = complete</div>
+      <div class="glyphs" id="glyphGrid"></div>
+      <div class="lbl">Metrics (grid units)</div>
+      <div class="row">Ascender<input type="number" id="mAsc" value="12"></div>
+      <div class="row">Cap height<input type="number" id="mCap" value="11"></div>
+      <div class="row">x‑height<input type="number" id="mX" value="8"></div>
+      <div class="row">Descender<input type="number" id="mDesc" value="-4"></div>
+      <div class="row">Advance width<input type="number" id="mAdv" value="9"></div>
+      <div class="row">Line height<input type="number" id="mLine" value="19"></div>
+      <div class="lbl">Reference font</div>
+      <select id="refFont" aria-label="Reference font">
+        <option value="Menlo, monospace">Menlo</option>
+        <option value="'SF Mono', Menlo, monospace">SF Mono</option>
+        <option value="Monaco, monospace">Monaco</option>
+        <option value="Consolas, monospace">Consolas</option>
+        <option value="'Courier New', monospace">Courier New</option>
+        <option value="'JetBrains Mono', monospace">JetBrains Mono (if installed)</option>
+      </select>
+      <div class="lbl">Rendering model</div>
+      <label class="row" style="justify-content:flex-start;gap:6px"><input type="checkbox" id="lcd" checked> Subpixel (RGB stripes)</label>
+      <div class="row">1‑bit below <input type="number" id="gasp" value="12" min="0" max="99" step="0.5"></div>
+      <span style="font-size:11px;color:var(--faint)">Greyscale only; FreeType/GDI switch to 1‑bit under this size.</span>
+    </div>
+
+    <div class="editor">
+      <div class="hintbar" id="hintBar" hidden>
+        <button class="btn" id="autoHints">Auto‑detect hint points</button>
+        <button class="btn" id="clearHints">Remove all</button>
+        <span class="spacer"></span>
+        <span id="hintMsg"></span>
+      </div>
+      <div id="canvasWrap"><canvas class="editor-canvas" id="ed" aria-label="Glyph editor canvas"></canvas></div>
+      <div class="status">
+        <label><input type="checkbox" id="showFill" checked> Fill</label>
+        <label><input type="checkbox" id="showSkel" checked> Skeleton</label>
+        <label><input type="checkbox" id="showPix"> Pixel grid at <input type="range" id="pixPpem" min="6" max="18" step="0.5" value="11" style="width:90px" aria-label="Pixel grid size"> <span class="val" id="pixPpemVal">11</span> pt</label>
+        <span class="spacer"></span>
+        <span id="cursorPos">—</span>
+        <span id="pathInfo"></span>
+      </div>
+      <div class="help" id="help"></div>
+    </div>
+
+    <div class="right">
+      <div class="strip">
+        <div class="lbl">Renderers · same outline, same hints</div>
+        <div class="rtable" id="rtable"></div>
+        <div class="actualrow" id="actualRow"></div>
+      </div>
+      <div class="preview">
+        <div class="ctl" style="justify-content:space-between;flex-wrap:wrap">
+          <span class="ctl">Size <input id="pSize" type="range" min="6" max="18" step="0.5" value="12" aria-label="Preview size"><span class="val" id="pSizeVal">12</span> pt</span>
+          <select id="pRenderer" aria-label="Preview renderer">
+            <option value="freetype">FreeType v35</option>
+            <option value="chrome">Chrome (DirectWrite)</option>
+            <option value="macos">macOS (CoreText)</option>
+          </select>
+        </div>
+        <canvas id="textCanvas" height="220"></canvas>
+        <textarea id="pText" aria-label="Preview text">let area = radius * radius * 3.14159
+var name = "banana"; // aaa
+func add(a: Int, b: Int) -> Int { a + b }
+Ada and Alan ate apples at Aarhus. 0O 1lI| {}[]()</textarea>
+        <span style="font-size:12px;color:var(--faint)">Drawn glyphs are used wherever they appear; other characters fall back to the reference font.</span>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="note">Renderer models are approximations for design purposes: macOS = no hinting, greyscale AA only (no subpixel since Mojave), slight stem darkening; Chrome on Windows (DirectWrite) = vertical grid‑fitting only, ClearType subpixel AA; FreeType v35 = full horizontal + vertical grid‑fitting (closest to Windows GDI), LCD‑filtered subpixel AA, or 1‑bit below the threshold in greyscale mode. With <em>Subpixel</em> on, zoomed cells show each pixel as its three RGB stripes as a monitor would light them, and actual‑size views show the resulting colour fringes. Chrome on macOS uses the macOS renderer. The <em>reference</em> row is the browser's own rendering of your reference font.</p>
+
+<section class="spec" id="spec">
+<h1>Build spec — CrispFonter for macOS</h1>
+<p class="lead">Everything needed to implement the app shown above as a native macOS app. The prototype's JavaScript on this page is the reference implementation of the geometry, grid‑fitting and renderer models; port it, don't reinvent it. Read the page source when a detail below is ambiguous.</p>
+
+<h2>1. Goal and constraints</h2>
+<ul>
+  <li>A document‑based macOS app for drawing monospaced programming fonts that stay legible at small sizes: draw a stroke <em>skeleton</em> on a dot grid → <em>thicken</em> the strokes → add <em>hint points</em> → preview at small sizes against a reference font → export a hinted TrueType <code>.ttf</code>.</li>
+  <li>Swift 5 / SwiftUI, macOS 15+, Xcode 16+. <strong>Use stock controls everywhere</strong> (segmented control, sliders, steppers, popups, <code>NSFontPanel</code>, <code>NSSavePanel</code>, <code>NSMenu</code> for context menus, standard toolbar). The only custom view is the editor canvas (an <code>NSView</code> drawn with CoreGraphics, hosted via <code>NSViewRepresentable</code>).</li>
+  <li><strong>Keep the code simple.</strong> No third‑party dependencies. Prefer plain functions over abstractions. Target ≈3–4k lines total.</li>
+  <li>Repository state: <code>CrispFonter.xcodeproj</code> (hand‑written, uses file‑system‑synchronized groups so any file added under <code>CrispFonter/</code> or <code>CrispFonterTests/</code> is compiled automatically), <code>CrispFonter/Info.plist</code> (document type <code>com.crispfonter.project</code>, extension <code>.crisp</code>), <code>CrispFonter/App/ProjectDocument.swift</code> (a <code>ReferenceFileDocument</code> with an undoable <code>mutate</code> helper), <code>CrispFonter/Model/FontProject.swift</code> (the data model below, final), <code>CrispFonter/Geometry/Outline.swift</code> (contour/outline types with <code>CGPath</code> conversion). Everything else is to be written.</li>
+</ul>
+
+<h2>2. Data model (already in <code>Model/FontProject.swift</code>)</h2>
+<pre><code>FontProject      unitsPerEm=1000, gridDivisions=16 (cells per em), metrics, defaultWeight=1.5 (grid units, whole stroke),
+                 glyphs [UInt32: Glyph], referenceFontName, previewText, previewSize (6–18, step 0.5),
+                 previewRenderer, previewLCD, pixelGridSize, previewSizes [9,11,13,16], export
+Metrics          ascender 12, capHeight 11, xHeight 8, descender −4, lineHeight 19, defaultAdvance 9   (grid units)
+Glyph            scalar (0 = .notdef), advance: Int? (nil → default), paths [SkeletonPath], hints [UUID: HintPoint], complete
+SkeletonPath     nodes [Node], closed
+Node             id, p (GridPoint), kind corner|smooth, cIn/cOut (absolute handle positions or nil),
+                 left/right: Double? (ratio of default half‑weight; nil = 1; 0 pins that edge to the skeleton),
+                 angle (degrees, cross‑section rotation for angled terminals), cap (grid units the end bulges; 0 = flat)
+HintPoint        x: SnapMode?, y: SnapMode?     SnapMode = nearest | negative | positive
+</code></pre>
+<p>All coordinates are in <em>grid units</em>, y up, baseline at 0, left sidebearing at x=0. Font units = grid × (unitsPerEm / gridDivisions). Save as pretty‑printed JSON. Every edit goes through <code>ProjectDocument.mutate</code> so ⌘Z works.</p>
+
+<h2>3. Window layout</h2>
+<p>One window per document, three panes (<code>HSplitView</code>): sidebar 200 pt · editor (flexible) · right panel 400 pt.</p>
+<table>
+<tr><th>Toolbar</th><td>Document name · Mode segmented control <em>Skeleton | Thicken | Hint</em> (keys 1/2/3) · Weight slider 0.5–4 step 0.25 with value · "Grid 16/em" · ½‑grid snap checkbox · Export… button.</td></tr>
+<tr><th>Sidebar</th><td><em>Glyphs</em>: 6‑column grid of buttons in <code>FontProject.glyphOrder</code> (.notdef shown as ▯, space as ␣). Click selects; <strong>double‑click toggles <code>complete</code></strong>. Styles: undrawn = faint; drawn = normal on a subtle tint; complete = green tint; current = accent outline. ←/→ step glyphs.<br><em>Metrics</em>: steppers (integers, grid units) for ascender, cap height, x‑height, descender, advance width, line height.<br><em>Reference font</em>: popup of monospaced families (<code>NSFontManager</code> families with fixed‑pitch trait) plus "Other…" → <code>NSFontPanel</code>.<br><em>Rendering model</em>: "Subpixel (RGB stripes)" checkbox; "1‑bit below [N] pt" stepper (greyscale only).</td></tr>
+<tr><th>Editor</th><td>Hint‑mode bar (only in Hint mode): "Auto‑detect hint points", "Remove all", status text. Canvas. Status bar: Fill / Skeleton checkboxes; "Pixel grid at [slider 6–18 step 0.5] pt"; cursor grid position; "N paths · N nodes · N hint points". A one‑line help text for the current mode.</td></tr>
+<tr><th>Right panel</th><td><em>Renderers strip</em>: header row of sizes 9/11/13/16 pt; one row per renderer model (FreeType v35, Chrome·Windows, macOS) with zoomed cells; a "Reference" row rendering the same character in the reference font via CoreText at the same ppem; then an "Actual size" row on a white card.<br><em>Text preview</em>: size slider 6–18 step 0.5 with value; renderer popup; a canvas rendering <code>previewText</code>; a <code>TextEditor</code> for the text.</td></tr>
+</table>
+
+<h2>4. Editor canvas</h2>
+<p>View transform: fit the box x∈[−3, advance+3], y∈[descender−2, ascender+2] into the view (equal scale both axes); ⌘0 refits; scroll‑wheel zooms, space‑drag pans. Draw in this order: dot grid (dot every cell, bigger every 4th; optional pixel grid overlay = orange lines every <code>gridDivisions/pixelGridSize</code> cells from the origin), blue guides with labels (ascender, cap height dashed, x‑height, baseline heavier, descender) and the two sidebearing verticals (x=0 and x=advance), the derived stems (Hint mode), the translucent fill of the outline (nonzero winding), the skeleton (violet 2 pt), handles (teal, dashed stem, 6 pt square), nodes (hollow: circle = smooth, square = corner; filled when selected), then mode‑specific handles.</p>
+<h3>Skeleton mode (pen tool)</h3>
+<ul>
+  <li>Snap cursor to whole grid; ⇧ or the ½‑grid option snaps to halves.</li>
+  <li>Mouse‑down not on anything: start a new path with a corner node (or append to the path being drawn). Dragging ≥0.5 cell before mouse‑up turns it smooth and sets <code>cOut</code> = cursor, <code>cIn</code> = mirror (⌥ leaves <code>cIn</code> alone).</li>
+  <li>While drawing: click on the last node again, double‑click, ⏎ or ⎋ finishes the path; click on the first node (≥3 nodes) closes it. A dashed rubber band follows the cursor from the last node.</li>
+  <li>Not drawing: drag a node (its handles move with it), drag a handle (smooth nodes keep the opposite handle collinear at its own length unless ⌥), ⌫ deletes the selected node (paths with &lt;2 nodes are removed).</li>
+  <li>Segments: a segment is a straight line iff <code>a.cOut == nil && b.cIn == nil</code>; otherwise a cubic with missing controls equal to the node position.</li>
+</ul>
+<h3>Thicken mode</h3>
+<ul>
+  <li>Each node shows two round orange handles on its cross‑section at distance <code>halfL = (left ?? 1)·weight/2</code> and <code>halfR</code> along ±(left normal rotated by <code>angle</code>). Ringed when ratio ≠ 1 or angle ≠ 0.</li>
+  <li><strong>Drag</strong> a side handle: thickness = projection of cursor onto that handle's direction, clamped ≥0, snapped to ¼ grid, stored as <code>ratio = t / (weight/2)</code>. <strong>⌘‑drag</strong> sets both sides. <strong>⌥‑drag</strong> rotates the cross‑section: <code>angle = atan2(cross(dir0,v), dot(dir0,v))</code> snapped to 15°, clamped ±75°. <strong>Double‑click</strong> resets left/right/angle.</li>
+  <li>Open‑path ends show a square cap handle at <code>node + outwardTangent(rotated by angle) × cap</code> (on the node when flat). Drag along that direction sets <code>cap</code> (≥0, ¼ steps); double‑click → 0.</li>
+</ul>
+<h3>Hint mode</h3>
+<ul>
+  <li>Click a node → toggle hint with <code>defaultHint</code> (see §6). Click on a segment (not a node) → insert a node there (line: projected point rounded to ¼; curve: de Casteljau split at t, new node smooth with the split handles, neighbours' handles updated) and hint it. ⌥‑click resets to default. Right‑click → <code>NSMenu</code>: Horizontal (x): Off / Nearest pixel edge / Push left / Push right · Vertical (y): Off / Nearest / Push down / Push up · Remove hint · Delete node.</li>
+  <li>Drag a hint point ≥12 pt: for each axis whose component is ≥40 % of the drag length set <code>positive</code> (right/up) or <code>negative</code> (left/down); other axis unchanged.</li>
+  <li>Drawing: hinted node filled orange with a halo; double‑headed arrow on an axis = nearest, single‑headed = push in that direction. Also draw the derived stems as faint orange bands. Entering Hint mode turns the pixel‑grid overlay on.</li>
+  <li>"Auto‑detect": for every node whose incoming or outgoing tangent is within 20° of vertical or horizontal, set <code>defaultHint</code>. "Remove all" clears. Both are single undo steps.</li>
+</ul>
+
+<h2>5. Geometry: skeleton → outline</h2>
+<p>Port <code>flatten</code>, <code>offsetSide</code>, <code>capPoints</code>, <code>outline</code> from the page script.</p>
+<ol>
+  <li><strong>Flatten</strong> each path to samples {p, halfL, halfR, angle}: lines → 2 samples, cubics → 25 samples (t = 0…1 in 24 steps); halfL/halfR/angle linearly interpolated between the segment's end nodes. Drop the duplicated last sample of closed paths.</li>
+  <li><strong>Offset</strong> the polyline on each side: at sample i take the unit normals of the previous and next segment (n1, n2; at an open end use the one that exists), miter direction m = normalize(n1+n2), scale = min(1/max(0.2, m·n1), 3); if the sample's angle ≠ 0 rotate m by it. Offset point = p + m·d·scale where d = halfL (left, side +1) or halfR (right, side −1).</li>
+  <li><strong>Contours</strong>: closed skeleton → two contours (left offsets; right offsets reversed). Open skeleton → one contour: left forward, end cap, right backward, start cap. Cap from edge A to edge B bulging <code>cap</code> along the (angle‑rotated) outward tangent: 7 points of the half‑ellipse <code>mid + half·cos(a) + out·cap·sin(a)</code>, a = π·i/8; none when cap = 0.</li>
+  <li>Fill with <strong>nonzero winding</strong>; overlapping strokes need no boolean union. For the editor and rasteriser a polygon is fine. For export convert to TrueType quadratics: fit each run of samples between skeleton nodes with quadratic Béziers (split until max deviation &lt; 1 font unit) — or, simplest acceptable version, emit the polygon points as on‑curve points. Orientation: make outer contours clockwise (y‑up) and set the <code>OVERLAP_SIMPLE</code> glyph flag.</li>
+</ol>
+
+<h2>6. Hints → grid‑fitting (preview) and TrueType (export)</h2>
+<pre><code>defaultHint(node): x = "nearest" if any adjacent tangent is within ~20° of vertical (|t.x| &lt; 0.35)
+                   y = "nearest" if any adjacent tangent is within ~20° of horizontal (|t.y| &lt; 0.35)
+                   neither → both nearest
+edgesAt(node):     e1 = p + left·halfL, e2 = p − left·halfR   where left = leftNormal(tangentAt(node)).rotated(angle)
+derivedHints:      for each hinted node and each hinted axis a:
+                     if |e1.a − e2.a| &gt; 0.1 → stem {lo, hi, mode} on that axis   else → point anchor {at: p.a, mode}
+snapPx(v, mode):   nearest → round(v); positive → ceil(v); negative → floor(v)
+</code></pre>
+<p><strong>Grid‑fitter</strong> (<code>fitOutline</code> in the script): scale outline to pixels (s = ppem/gridDivisions). Build one monotone piecewise‑linear map per axis from anchors {src, dst}, sorted by src, dropping any anchor that would break monotonicity; values outside the anchors shift by the nearest anchor's delta. Y anchors (when the renderer hints y): every zone z → round(z·s); each horizontal stem: w = max(1, round(hi−lo)); mode positive → hiP = ceil(hi), loP = hiP−w; negative → loP = floor(lo), hiP = loP+w; nearest → if an edge is within 0.6·s of a zone, that edge takes the zone's target and the other follows, else loP = round(lo); plus point anchors. X anchors (only FreeType model): vertical stems the same way without zones, plus point anchors. Apply the maps to every outline point. Advance = round(adv·s) for FreeType, fractional otherwise.</p>
+<p><strong>Rasteriser</strong> (<code>rasterize</code>): bitmap w = ⌈adv·s⌉+3, h = base + ⌈−desc·s⌉+2 with base = round(asc·s)+1 rows from the top; glyph origin at pixel x=1. Supersample 4× vertically and 4× per <em>subpixel</em> horizontally (12× per pixel) into a CGBitmapContext, fill nonzero (macOS model also strokes the path with width 0.44 px = 0.22 dilation). Average to per‑subpixel coverage. If LCD is on and the model supports it apply FreeType's 5‑tap filter [8,77,86,77,8]/256 across subpixels; grey coverage = mean of the three subpixels; in greyscale mode FreeType below the 1‑bit threshold thresholds coverage at 0.5. Cache bitmaps by (glyph revision, weight, ppem, renderer, lcd).</p>
+<p><strong>Display</strong>: zoomed cell = each pixel drawn as three vertical stripes coloured (light,0,0), (0,light,0), (0,0,light) with light = 255·(1−coverage) — a lit white screen, pixelated scaling, integer zoom that is a multiple of 3; greyscale mode draws grey blocks instead. Actual size and text preview: pixel colour = (1−cR, 1−cG, 1−cB) on white. Reference row: CoreText glyph at the same ppem into a bitmap with <code>setShouldSmoothFonts(false)</code>, drawn with the same zoom.</p>
+<p><strong>TrueType compile</strong> (per glyph, executed at every ppem by Windows/FreeType; macOS ignores it): find outline point indices at each hinted edge (record, when building the outline, which skeleton node and side produced each point). Program: <code>SVTCA[y]</code>; for each zone‑anchored or nearest edge <code>MIAP[rnd]</code> to the zone's cvt entry / <code>MDAP[rnd]</code>; for a stem, from the anchored edge <code>MIRP[min,rnd,black]</code> to the other edge with the stem width's cvt entry; for <code>positive</code>/<code>negative</code> modes wrap the MDAP in <code>RUTG</code>/<code>RDTG</code> … <code>RTG</code>; <code>ALIGNRP</code>/<code>SHP</code> the remaining points on the same edge; <code>IUP[y]</code>. Then the same for x with <code>SVTCA[x]</code> and <code>IUP[x]</code>. cvt: one entry per zone height (font units) and per distinct stem width rounded to the nearest grid unit. prep: <code>SCANCTRL</code>/<code>SCANTYPE</code> dropout control; if <code>MPPEM &gt; hintCutoffPPEM</code> then <code>INSTCTRL</code> off. gasp: below <code>gaspMonoThreshold</code> → GRIDFIT only; above → GRIDFIT | DOGRAY | SYMMETRIC_GRIDFIT | SYMMETRIC_SMOOTHING. Write a tiny assembler for just these opcodes (PUSHB/PUSHW/NPUSHB, SVTCA, SRP0/1/2, MDAP, MIAP, MDRP, MIRP, ALIGNRP, SHP, IUP, RTG, RUTG, RDTG, MPPEM, GT, IF/EIF, INSTCTRL, SCANCTRL, SCANTYPE).</p>
+
+<h2>7. TrueType export</h2>
+<p><code>NSSavePanel</code> → write tables <code>head, hhea, maxp, OS/2, hmtx, cmap (format 4), loca (long), glyf, name, post (format 3), gasp, cvt, fpgm (empty ok), prep</code> with correct checksums and <code>checkSumAdjustment</code>. Glyph 0 = .notdef (the user's drawing, or a hollow box if undrawn), glyph 1 = space (empty, advance only), then every drawn glyph in <code>glyphOrder</code>. Advance = (advance ?? defaultAdvance)·unitsPerCell. hhea/OS/2 ascender/descender/lineGap from metrics (lineGap = lineHeight − ascender + descender). Export sheet options: include hints, 1‑bit threshold, hint cut‑off ppem, family/style names.</p>
+
+<h2>8. Text preview</h2>
+<p>Monospaced layout: advance = round(defaultAdvance·s) px, line height = round(lineHeight·s) px, first baseline at 8 + round(ascender·s). For each character: if that glyph is drawn, draw its cached bitmap for the selected renderer at (x−1, baseline−base); otherwise draw the character with the reference font in grey via CoreText. Re‑render on any change (debounce ~40 ms while dragging).</p>
+
+<h2>9. Verification</h2>
+<ul>
+  <li>Unit tests: JSON round‑trip of <code>FontProject</code>; outline of a straight vertical stroke of weight 2 at x=4 has edges at x=3 and x=5; a node with left=0 has an edge exactly on the skeleton; grid‑fitter maps a stem [3.2, 4.7] px (w = round(1.5) = 2) to [3, 5] with nearest, to [3, 5] with positive (hiP = ceil(4.7) = 5), and a stem [3.4, 4.1] px (w = 1) to [3, 4] nearest, [4, 5] positive, [3, 4] negative; TrueType writer output re‑parses (table directory, checksums, loca/glyf lengths, cmap lookups).</li>
+  <li>Manual: draw <code>n</code>, add a shoulder hint pushed up+right, confirm the FreeType row squares the arch at 9–11 pt while the macOS row does not; export, open the .ttf in Font Book; if Homebrew <code>freetype</code> is present, render the exported font with a small C harness (<code>FT_LOAD_TARGET_MONO</code>, <code>FREETYPE_PROPERTIES=truetype:interpreter-version=35</code>) and compare with the FreeType row.</li>
+</ul>
+</section>
+
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const GRID = 16;                       // cells per em
+const state = {
+  mode: "skeleton",
+  weight: 1.5,
+  metrics: { asc: 12, cap: 11, x: 8, desc: -4, adv: 9, line: 19 },
+  glyphs: {},                          // char -> {paths, hints:{<nodeId>: 'x'|'y'|'xy'}}
+  complete: new Set(),
+  current: "a",
+  drawing: null, sel: null, drag: null, hover: null,
+  showFill: true, showSkel: true, showPix: false, pixPpem: 11, halfSnap: false,
+  gasp: 12, lcd: true, refFont: "Menlo, monospace",
+};
+const history = [];
+const NOTDEF = ".notdef";
+const GLYPH_ORDER = [NOTDEF, " ", ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789{}[]()<>=;:,.+-*/\\|&!?'\"@#$%^_~`"];
+const glyphLabel = ch => ch === NOTDEF ? "▯" : ch === " " ? "␣" : ch;
+const glyphTitle = ch => ch === NOTDEF ? ".notdef  (invalid character)" : ch === " " ? "space  U+0020" : `${ch}  U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}`;
+let nextId = 1;
+// ang = rotation of the stroke's cross-section at this node in degrees (angled terminals);
+// cap = how far a stroke end bulges beyond the node in grid units (0 = flat).
+function node(x, y, o = {}) { return Object.assign({ id: nextId++, x, y, cin: null, cout: null, kind: "corner", left: null, right: null, ang: 0, cap: 0 }, o); }
+function rot(v, deg) { const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return { x: v.x * c - v.y * s, y: v.x * s + v.y * c }; }
+
+/* ---------- sample glyphs so the page is alive on load ---------- */
+// A hint is {x: null|"near"|"neg"|"pos", y: null|"near"|"neg"|"pos"}: which axes snap, and whether the
+// stroke edge is pushed to the nearest pixel boundary, or forced down/left (neg) or up/right (pos).
+function H(spec) { const h = { x: null, y: null }; for (const part of spec.split(" ")) { const [a, m] = part.split(":"); h[a] = m || "near"; } return h; }
+function sample(paths, hintSpec) {
+  const g = { paths, hints: {} };
+  // hintSpec: [[pathIndex, nodeIndex, "x y:pos"], ...]
+  for (const [pi, ni, spec] of hintSpec) g.hints[paths[pi].nodes[ni].id] = H(spec);
+  return g;
+}
+state.glyphs.a = sample([
+  { closed: false, nodes: [
+    node(1, 6, { kind: "smooth", cout: { x: 1, y: 7.1 } }),
+    node(4, 8, { kind: "smooth", cin: { x: 2.3, y: 8 }, cout: { x: 5.7, y: 8 } }),
+    node(7, 6, { kind: "smooth", cin: { x: 7, y: 7.1 }, cout: { x: 7, y: 5 } }),
+    node(7, 0),
+  ]},
+  { closed: true, nodes: [
+    node(7, 3.5),
+    node(3, 3.5, { kind: "smooth", cin: { x: 5, y: 3.5 }, cout: { x: 1.8, y: 3.5 } }),
+    node(1, 1.75, { kind: "smooth", cin: { x: 1, y: 2.6 }, cout: { x: 1, y: 0.9 } }),
+    node(3, 0, { kind: "smooth", cin: { x: 1.8, y: 0 }, cout: { x: 5, y: 0 } }),
+    node(7, 1),
+  ]},
+], [[0, 1, "y"], [0, 2, "x"], [0, 3, "x"], [1, 1, "y"], [1, 2, "x"], [1, 3, "y"]]);
+// n: the shoulder has an extra node pushed up+right so the arch squares off at small sizes.
+state.glyphs.n = sample([
+  { closed: false, nodes: [node(1, 0), node(1, 8)] },
+  { closed: false, nodes: [
+    node(1, 5.5, { kind: "smooth", cout: { x: 1, y: 7.4 } }),
+    node(4, 8, { kind: "smooth", cin: { x: 2.2, y: 8 }, cout: { x: 5.2, y: 8 } }),
+    node(6.4, 7, { kind: "smooth", cin: { x: 5.9, y: 7.6 }, cout: { x: 6.8, y: 6.5 } }),
+    node(7, 5.5, { kind: "smooth", cin: { x: 7, y: 6.1 } }),
+    node(7, 0)] },
+], [[0, 0, "x"], [0, 1, "x y"], [1, 1, "y"], [1, 2, "x:pos y:pos"], [1, 4, "x"]]);
+state.glyphs.l = sample([
+  { closed: false, nodes: [node(2, 12), node(4, 12), node(4, 0)] },
+  { closed: false, nodes: [node(1.5, 0), node(6.5, 0)] },
+], [[0, 0, "y"], [0, 1, "x y"], [0, 2, "x y"], [1, 0, "y"], [1, 1, "y"]]);
+// c: both terminals angled 30° with a slightly convex cap.
+state.glyphs.c = sample([{ closed: false, nodes: [
+  node(6.5, 6.25, { kind: "smooth", cout: { x: 5.8, y: 7.6 }, ang: 30, cap: 0.25 }),
+  node(4, 8, { kind: "smooth", cin: { x: 5.5, y: 8 }, cout: { x: 2.2, y: 8 } }),
+  node(1, 4, { kind: "smooth", cin: { x: 1, y: 6.2 }, cout: { x: 1, y: 1.8 } }),
+  node(4, 0, { kind: "smooth", cin: { x: 2.2, y: 0 }, cout: { x: 5.5, y: 0 } }),
+  node(6.5, 1.75, { kind: "smooth", cin: { x: 5.8, y: 0.4 }, ang: -30, cap: 0.25 }),
+]}], [[0, 1, "y"], [0, 2, "x"], [0, 3, "y"]]);
+state.glyphs[NOTDEF] = sample([{ closed: true, nodes: [node(1.5, 0), node(1.5, 11), node(6.5, 11), node(6.5, 0)] }], [[0, 0, "x y"], [0, 1, "x y"], [0, 2, "x y"], [0, 3, "x y"]]);
+state.glyphs[" "] = { paths: [], hints: {} };
+state.complete.add("n"); state.complete.add("l"); state.complete.add(" "); state.complete.add(NOTDEF);
+
+function glyph() {
+  if (!state.glyphs[state.current]) state.glyphs[state.current] = { paths: [], hints: {} };
+  return state.glyphs[state.current];
+}
+function pushHistory() { history.push(JSON.stringify(glyph())); if (history.length > 100) history.shift(); }
+function undo() { if (!history.length) return; state.glyphs[state.current] = JSON.parse(history.pop()); state.drawing = null; state.sel = null; renderAll(); }
+function nodeById(g, id) { for (const p of g.paths) for (const n of p.nodes) if (n.id === id) return { path: p, node: n }; return null; }
+
+/* ---------- geometry: skeleton -> outline (polygon contours, grid units) ---------- */
+// left/right are ratios of the default half-weight (null = 1), so the weight slider rescales every node.
+// Ratios of 0 are the exception: they stay 0 whatever the weight (the edge is pinned to the skeleton).
+function halfL(n) { return (n.left ?? 1) * state.weight / 2; }
+function halfR(n) { return (n.right ?? 1) * state.weight / 2; }
+function bez(p0, p1, p2, p3, t) {
+  const mt = 1 - t;
+  return { x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x, y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y };
+}
+function flatten(path) {
+  const n = path.nodes, count = path.closed ? n.length : n.length - 1, out = [];
+  for (let i = 0; i < count; i++) {
+    const a = n[i], b = n[(i + 1) % n.length];
+    const isLine = !a.cout && !b.cin;
+    const steps = isLine ? 1 : 24;
+    const c1 = a.cout || a, c2 = b.cin || b;
+    for (let s = (i === 0 ? 0 : 1); s <= steps; s++) {
+      const t = s / steps;
+      const p = isLine ? { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } : bez(a, c1, c2, b, t);
+      out.push({ x: p.x, y: p.y, l: halfL(a) + (halfL(b) - halfL(a)) * t, r: halfR(a) + (halfR(b) - halfR(a)) * t, ang: a.ang + (b.ang - a.ang) * t });
+    }
+  }
+  if (path.closed && out.length > 1) out.pop();
+  return out;
+}
+function norm(v) { const l = Math.hypot(v.x, v.y) || 1; return { x: v.x / l, y: v.y / l }; }
+function offsetSide(pts, closed, side) {
+  const N = pts.length, res = [];
+  const dir = i => norm({ x: pts[(i + 1) % N].x - pts[i].x, y: pts[(i + 1) % N].y - pts[i].y });
+  for (let i = 0; i < N; i++) {
+    const d = side > 0 ? pts[i].l : pts[i].r;
+    let n1 = null, n2 = null;
+    if (closed || i > 0) { const t = dir((i - 1 + N) % N); n1 = { x: -t.y * side, y: t.x * side }; }
+    if (closed || i < N - 1) { const t = dir(i); n2 = { x: -t.y * side, y: t.x * side }; }
+    if (!n1) n1 = n2; if (!n2) n2 = n1;
+    if (!n1) { res.push({ x: pts[i].x, y: pts[i].y }); continue; }
+    let m = { x: n1.x + n2.x, y: n1.y + n2.y };
+    const ml = Math.hypot(m.x, m.y);
+    let scale;
+    if (ml < 1e-6) { m = n2; scale = 1; } else { m = { x: m.x / ml, y: m.y / ml }; scale = Math.min(1 / Math.max(0.2, m.x * n1.x + m.y * n1.y), 3); }
+    if (pts[i].ang) m = rot(m, pts[i].ang);
+    res.push({ x: pts[i].x + m.x * d * scale, y: pts[i].y + m.y * d * scale });
+  }
+  return res;
+}
+// Cap from edge point A to edge point B, bulging `ext` grid units along dirOut (0 = flat, no extra points).
+function capPoints(A, B, dirOut, ext) {
+  if (ext <= 0) return [];
+  const pts = [], steps = 8, mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, half = { x: (A.x - B.x) / 2, y: (A.y - B.y) / 2 };
+  for (let i = 1; i < steps; i++) {
+    const a = Math.PI * i / steps;
+    pts.push({ x: mid.x + half.x * Math.cos(a) + dirOut.x * ext * Math.sin(a), y: mid.y + half.y * Math.cos(a) + dirOut.y * ext * Math.sin(a) });
+  }
+  return pts;
+}
+function outline(g) {
+  const contours = [];
+  for (const path of g.paths) {
+    if (path.nodes.length < 2) continue;
+    const pts = flatten(path);
+    const L = offsetSide(pts, path.closed, +1), R = offsetSide(pts, path.closed, -1);
+    if (path.closed) { contours.push(L); contours.push(R.slice().reverse()); }
+    else {
+      const N = pts.length, first = path.nodes[0], last = path.nodes[path.nodes.length - 1];
+      const dEnd = rot(norm({ x: pts[N-1].x - pts[N-2].x, y: pts[N-1].y - pts[N-2].y }), last.ang);
+      const dStart = rot(norm({ x: pts[0].x - pts[1].x, y: pts[0].y - pts[1].y }), first.ang);
+      contours.push([...L, ...capPoints(L[N-1], R[N-1], dEnd, last.cap), ...R.slice().reverse(), ...capPoints(R[0], L[0], dStart, first.cap)]);
+    }
+  }
+  return contours;
+}
+
+/* ---------- hint points -> stems (what the app compiles to TrueType) ---------- */
+// Tangent direction(s) at a node: incoming and outgoing.
+function tangents(path, i) {
+  const n = path.nodes, nd = n[i];
+  const prev = path.closed || i > 0 ? n[(i - 1 + n.length) % n.length] : null;
+  const next = path.closed || i < n.length - 1 ? n[(i + 1) % n.length] : null;
+  const tin = nd.cin ? norm({ x: nd.x - nd.cin.x, y: nd.y - nd.cin.y }) : (prev ? norm({ x: nd.x - prev.x, y: nd.y - prev.y }) : null);
+  const tout = nd.cout ? norm({ x: nd.cout.x - nd.x, y: nd.cout.y - nd.y }) : (next ? norm({ x: next.x - nd.x, y: next.y - nd.y }) : null);
+  return { tin, tout };
+}
+function tangentAt(path, i) {
+  const { tin, tout } = tangents(path, i);
+  if (tin && tout) { const d = { x: tin.x + tout.x, y: tin.y + tout.y }; return Math.hypot(d.x, d.y) < 1e-6 ? tout : norm(d); }
+  return tin || tout || { x: 1, y: 0 };
+}
+// Default hint for a node: snap x for vertical strokes, y for horizontal, both for H/V corners — all "nearest".
+function defaultHint(path, i) {
+  const { tin, tout } = tangents(path, i);
+  let x = false, y = false;
+  for (const t of [tin, tout]) { if (!t) continue; if (Math.abs(t.x) < 0.35) x = true; if (Math.abs(t.y) < 0.35) y = true; }
+  if (!x && !y) x = y = true;
+  return { x: x ? "near" : null, y: y ? "near" : null };
+}
+// The two stroke edges at a node, in grid units.
+function edgesAt(path, i) {
+  const nd = path.nodes[i], t = tangentAt(path, i), left = rot({ x: -t.y, y: t.x }, nd.ang);
+  return [{ x: nd.x + left.x * halfL(nd), y: nd.y + left.y * halfL(nd) }, { x: nd.x - left.x * halfR(nd), y: nd.y - left.y * halfR(nd) }];
+}
+// Derive stems / single anchors from hint points: {v:[{lo,hi,mode}], h:[...], px:[{at,mode}], py:[...]}
+function derivedHints(g) {
+  const r = { v: [], h: [], px: [], py: [] };
+  for (const path of g.paths) path.nodes.forEach((nd, i) => {
+    const hint = g.hints[nd.id]; if (!hint) return;
+    const [e1, e2] = edgesAt(path, i);
+    if (hint.x) { if (Math.abs(e1.x - e2.x) > 0.1) r.v.push({ lo: Math.min(e1.x, e2.x), hi: Math.max(e1.x, e2.x), mode: hint.x }); else r.px.push({ at: nd.x, mode: hint.x }); }
+    if (hint.y) { if (Math.abs(e1.y - e2.y) > 0.1) r.h.push({ lo: Math.min(e1.y, e2.y), hi: Math.max(e1.y, e2.y), mode: hint.y }); else r.py.push({ at: nd.y, mode: hint.y }); }
+  });
+  return r;
+}
+// Round a pixel coordinate by mode: nearest, or forced toward neg / pos.
+function snapPx(v, mode) { return mode === "pos" ? Math.ceil(v - 1e-4) : mode === "neg" ? Math.floor(v + 1e-4) : Math.round(v); }
+function zones() { const m = state.metrics; return [m.desc, 0, m.x, m.cap, m.asc]; }
+function buildMap(anchors) {
+  anchors.sort((a, b) => a.src - b.src);
+  const clean = [];
+  for (const a of anchors) { if (!clean.length || (a.src > clean[clean.length-1].src + 1e-6 && a.dst >= clean[clean.length-1].dst)) clean.push(a); }
+  if (!clean.length) return v => v;
+  return v => {
+    if (v <= clean[0].src) return v + (clean[0].dst - clean[0].src);
+    const last = clean[clean.length-1];
+    if (v >= last.src) return v + (last.dst - last.src);
+    for (let i = 0; i < clean.length - 1; i++) {
+      const a = clean[i], b = clean[i+1];
+      if (v >= a.src && v <= b.src) return a.dst + (b.dst - a.dst) * ((v - a.src) / (b.src - a.src));
+    }
+    return v;
+  };
+}
+function stemAnchors(stems, s, zoneSet) {
+  const anchors = [];
+  for (const st of stems) {
+    const lo = st.lo * s, hi = st.hi * s, w = Math.max(1, Math.round(hi - lo));
+    const near = v => zoneSet && zoneSet.find(z => Math.abs(z.src - v) < 0.6 * s);   // edges near a zone (incl. overshoot) go to the zone
+    const zl = near(lo), zh = near(hi);
+    let loP, hiP;
+    if (st.mode === "pos") { hiP = snapPx(hi, "pos"); loP = hiP - w; }               // push the top/right edge outward
+    else if (st.mode === "neg") { loP = snapPx(lo, "neg"); hiP = loP + w; }          // push the bottom/left edge outward
+    else if (zl) { loP = zl.dst; hiP = loP + w; } else if (zh) { hiP = zh.dst; loP = hiP - w; }
+    else { loP = Math.round(lo); hiP = loP + w; }
+    anchors.push({ src: lo, dst: loP }, { src: hi, dst: hiP });
+  }
+  return anchors;
+}
+function fitOutline(g, ppem, hintX, hintY) {
+  const s = ppem / GRID, d = derivedHints(g);
+  const contours = outline(g).map(c => c.map(p => ({ x: p.x * s, y: p.y * s })));
+  let fx = v => v, fy = v => v;
+  if (hintY) {
+    const za = zones().map(z => ({ src: z * s, dst: Math.round(z * s) }));
+    fy = buildMap([...za, ...stemAnchors(d.h, s, za), ...d.py.map(p => ({ src: p.at * s, dst: snapPx(p.at * s, p.mode) }))]);
+  }
+  if (hintX) fx = buildMap([...stemAnchors(d.v, s, null), ...d.px.map(p => ({ src: p.at * s, dst: snapPx(p.at * s, p.mode) }))]);
+  return { contours: contours.map(c => c.map(p => ({ x: fx(p.x), y: fy(p.y) }))), adv: state.metrics.adv * s };
+}
+
+/* ---------- rasterizer models ---------- */
+const RENDERERS = [
+  { id: "freetype", name: "FreeType v35", sub: "≈ Windows GDI · full hinting", hintX: true, hintY: true, dilate: 0, mono: true, lcd: true, fracX: false },
+  { id: "chrome",   name: "Chrome · Windows", sub: "DirectWrite · vertical hinting", hintX: false, hintY: true, dilate: 0, mono: false, lcd: true, fracX: true },
+  { id: "macos",    name: "macOS", sub: "CoreText · unhinted, greyscale", hintX: false, hintY: false, dilate: 0.22, mono: false, lcd: false, fracX: true },
+];
+const SS = 4;                                   // vertical supersamples per pixel; horizontal = SS per subpixel
+const FIR = [8, 77, 86, 77, 8].map(v => v / 256); // FreeType's default LCD filter
+// Rasterize to {w,h,base,sub:Float32Array(w*3*h) subpixel coverage, cov:Float32Array(w*h) grey coverage}
+function rasterize(g, ppem, R) {
+  const s = ppem / GRID, m = state.metrics;
+  const fit = fitOutline(g, ppem, R.hintX, R.hintY);
+  const base = Math.round(m.asc * s) + 1;
+  const h = base + Math.ceil(-m.desc * s) + 2, w = Math.ceil(m.adv * s) + 3;
+  const cv = document.createElement("canvas"); cv.width = w * 3 * SS; cv.height = h * SS;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#000"; ctx.beginPath();
+  for (const c of fit.contours) {
+    c.forEach((p, i) => { const X = (p.x + 1) * 3 * SS, Y = (base - p.y) * SS; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    ctx.closePath();
+  }
+  ctx.fill("nonzero");
+  if (R.dilate) { ctx.lineWidth = R.dilate * 2 * SS; ctx.strokeStyle = "#000"; ctx.lineJoin = "round"; ctx.stroke(); }
+  const img = ctx.getImageData(0, 0, cv.width, cv.height).data;
+  const W3 = w * 3, raw = new Float32Array(W3 * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < W3; x++) {
+    let sum = 0;
+    for (let yy = 0; yy < SS; yy++) for (let xx = 0; xx < SS; xx++) sum += img[(((y*SS+yy) * cv.width) + x*SS+xx) * 4 + 3];
+    raw[y * W3 + x] = sum / (SS * SS * 255);
+  }
+  const useLCD = state.lcd && R.lcd, mono = !state.lcd && R.mono && ppem < state.gasp;
+  const sub = new Float32Array(W3 * h), cov = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const grey = (raw[y*W3 + x*3] + raw[y*W3 + x*3+1] + raw[y*W3 + x*3+2]) / 3;
+      cov[y*w + x] = mono ? (grey >= 0.5 ? 1 : 0) : grey;
+    }
+    for (let x = 0; x < W3; x++) {
+      if (!useLCD) { sub[y*W3 + x] = cov[y*w + Math.floor(x / 3)]; continue; }
+      let v = 0; for (let k = -2; k <= 2; k++) { const xx = Math.min(W3 - 1, Math.max(0, x + k)); v += raw[y*W3 + xx] * FIR[k + 2]; }
+      sub[y*W3 + x] = v;
+    }
+  }
+  return { w, h, base, sub, cov, adv: R.hintX || !R.fracX ? Math.round(fit.adv) : fit.adv };
+}
+// Actual-size canvas on white: pixel colour = per-channel remaining light.
+function bitmapCanvas(bmp) {
+  const c = document.createElement("canvas"); c.width = bmp.w; c.height = bmp.h;
+  const ctx = c.getContext("2d"), id = ctx.createImageData(bmp.w, bmp.h), W3 = bmp.w * 3;
+  for (let y = 0; y < bmp.h; y++) for (let x = 0; x < bmp.w; x++) {
+    const i = (y * bmp.w + x) * 4;
+    id.data[i] = Math.round(255 * (1 - bmp.sub[y*W3 + x*3])); id.data[i+1] = Math.round(255 * (1 - bmp.sub[y*W3 + x*3+1])); id.data[i+2] = Math.round(255 * (1 - bmp.sub[y*W3 + x*3+2])); id.data[i+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0); return c;
+}
+// Zoomed "macro photo": each pixel as three lit RGB stripes (or grey blocks when subpixel is off).
+function zoomCanvas(bmp, zoom) {
+  const c = document.createElement("canvas"), W3 = bmp.w * 3;
+  c.width = W3; c.height = bmp.h;
+  const ctx = c.getContext("2d"), id = ctx.createImageData(W3, bmp.h);
+  for (let y = 0; y < bmp.h; y++) for (let x = 0; x < W3; x++) {
+    const i = (y * W3 + x) * 4, light = Math.round(255 * (1 - bmp.sub[y*W3 + x]));
+    if (state.lcd) { id.data[i] = x % 3 === 0 ? light : 0; id.data[i+1] = x % 3 === 1 ? light : 0; id.data[i+2] = x % 3 === 2 ? light : 0; }
+    else { id.data[i] = id.data[i+1] = id.data[i+2] = light; }
+    id.data[i+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+  c.style.width = bmp.w * zoom + "px"; c.style.height = bmp.h * zoom + "px";
+  return c;
+}
+
+/* ---------- renderer strip ---------- */
+const SIZES = [9, 11, 13, 16];
+function renderStrip() {
+  const g = glyph(), t = $("#rtable");
+  t.innerHTML = "";
+  t.appendChild(el("div", "h", ""));
+  for (const s of SIZES) t.appendChild(el("div", "h", s + " pt"));
+  for (const R of RENDERERS) {
+    const name = el("div", "rname", R.name); name.appendChild(el("small", "", R.sub)); t.appendChild(name);
+    for (const s of SIZES) {
+      const cell = el("div", "cell"), bmp = rasterize(g, s, R);
+      cell.appendChild(zoomCanvas(bmp, Math.max(3, Math.floor(72 / bmp.h) - Math.floor(72 / bmp.h) % 3)));
+      t.appendChild(cell);
+    }
+  }
+  const name = el("div", "rname", "Reference"); name.appendChild(el("small", "", "browser rendering")); t.appendChild(name);
+  for (const s of SIZES) {
+    const cell = el("div", "cell"), m = state.metrics, sc = s / GRID;
+    const base = Math.round(m.asc * sc) + 1, h = base + Math.ceil(-m.desc * sc) + 2, w = Math.ceil(m.adv * sc) + 3;
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); ctx.font = `${s}px ${state.refFont}`; ctx.fillStyle = "#000";
+    ctx.fillText(state.current === NOTDEF ? String.fromCharCode(0xFFFD) : state.current, 1, base);
+    const zoom = Math.max(3, Math.floor(72 / h)); c.style.width = w * zoom + "px"; c.style.height = h * zoom + "px";
+    cell.appendChild(c); t.appendChild(cell);
+  }
+  const ar = $("#actualRow"); ar.innerHTML = "";
+  ar.appendChild(el("span", "", "Actual size:"));
+  for (const R of RENDERERS) {
+    const wrap = el("span", "", R.name.split(" ")[0] + " ");
+    for (const s of SIZES) wrap.appendChild(bitmapCanvas(rasterize(g, s, R)));
+    ar.appendChild(wrap);
+  }
+}
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+/* ---------- text preview ---------- */
+function renderText() {
+  const cv = $("#textCanvas"), W = cv.clientWidth || 360; cv.width = W;
+  const size = +$("#pSize").value, R = RENDERERS.find(r => r.id === $("#pRenderer").value);
+  const ctx = cv.getContext("2d"), m = state.metrics, sc = size / GRID, lineH = Math.round(m.line * sc);
+  const lines = $("#pText").value.split("\n");
+  cv.height = Math.max(120, lines.length * lineH + 16);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.font = `${size}px ${state.refFont}`;
+  const cache = {}, adv = Math.round(m.adv * sc);
+  let y = 8 + Math.round(m.asc * sc);
+  for (const line of lines) {
+    let x = 8;
+    for (const ch of line) {
+      const g = state.glyphs[ch];
+      if (g && g.paths.some(p => p.nodes.length >= 2)) {
+        if (!cache[ch]) cache[ch] = bitmapCanvas(rasterize(g, size, R));
+        ctx.drawImage(cache[ch], x - 1, y - (Math.round(m.asc * sc) + 1));
+      } else if (ch !== " ") { ctx.fillStyle = "#8A8F99"; ctx.fillText(ch, x, y); }
+      x += adv;
+      if (x > W - adv) break;
+    }
+    y += lineH;
+  }
+}
+
+/* ---------- editor canvas ---------- */
+const ed = $("#ed"); const ectx = ed.getContext("2d");
+let view = { cell: 30, ox: 0, oy: 0 };
+function resize() {
+  const wrap = $("#canvasWrap"), dpr = window.devicePixelRatio || 1;
+  const w = wrap.clientWidth, h = wrap.clientHeight || 520;
+  ed.width = w * dpr; ed.height = h * dpr; ed.style.width = w + "px"; ed.style.height = h + "px";
+  ectx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = state.metrics, spanY = (m.asc - m.desc) + 4, spanX = m.adv + 6;
+  view.cell = Math.max(10, Math.min((h - 20) / spanY, (w - 20) / spanX));
+  view.ox = Math.round((w - m.adv * view.cell) / 2);
+  view.oy = Math.round(h / 2 + ((m.asc + m.desc) / 2) * view.cell);
+  draw();
+}
+const toPx = p => ({ x: view.ox + p.x * view.cell, y: view.oy - p.y * view.cell });
+const toGrid = (px, py) => ({ x: (px - view.ox) / view.cell, y: (view.oy - py) / view.cell });
+function snap(p, fine) { const q = fine || state.halfSnap ? 2 : 1; return { x: Math.round(p.x * q) / q, y: Math.round(p.y * q) / q }; }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// Arrow along (dx,dy). mode "near" = double-headed; "pos" = single head toward +axis; "neg" = toward -axis.
+function arrow(ctx, x, y, dx, dy, len, mode) {
+  const heads = mode === "near" ? [1, -1] : mode === "pos" ? [1] : [-1];
+  const from = mode === "near" ? -1 : 0;
+  ctx.beginPath(); ctx.moveTo(x + dx * len * from, y + dy * len * from); ctx.lineTo(x + dx * len * (mode === "neg" ? -1 : 1) * (mode === "near" ? 1 : 1.35), y + dy * len * (mode === "neg" ? -1 : 1) * (mode === "near" ? 1 : 1.35)); ctx.stroke();
+  for (const s of heads) { const L = mode === "near" ? len : len * 1.35, tx = x + dx * L * s, ty = y + dy * L * s; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx - (dx * 4 + dy * 3) * s, ty - (dy * 4 - dx * 3) * s); ctx.moveTo(tx, ty); ctx.lineTo(tx - (dx * 4 - dy * 3) * s, ty - (dy * 4 + dx * 3) * s); ctx.stroke(); }
+}
+function draw() {
+  const w = ed.clientWidth, h = ed.clientHeight, m = state.metrics, g = glyph();
+  ectx.clearRect(0, 0, w, h);
+  ectx.fillStyle = css("--dot");
+  const gx0 = Math.floor(toGrid(0, 0).x), gx1 = Math.ceil(toGrid(w, 0).x), gy1 = Math.ceil(toGrid(0, 0).y), gy0 = Math.floor(toGrid(0, h).y);
+  for (let x = gx0; x <= gx1; x++) for (let y = gy0; y <= gy1; y++) { const p = toPx({ x, y }); const big = (x % 4 === 0 && y % 4 === 0); ectx.beginPath(); ectx.arc(p.x, p.y, big ? 1.8 : 1.1, 0, 7); ectx.fill(); }
+  if (state.showPix) {
+    const pxCell = GRID / state.pixPpem * view.cell;
+    ectx.strokeStyle = css("--thick"); ectx.globalAlpha = 0.25; ectx.lineWidth = 1;
+    for (let x = view.ox; x < w; x += pxCell) { ectx.beginPath(); ectx.moveTo(x, 0); ectx.lineTo(x, h); ectx.stroke(); }
+    for (let x = view.ox - pxCell; x > 0; x -= pxCell) { ectx.beginPath(); ectx.moveTo(x, 0); ectx.lineTo(x, h); ectx.stroke(); }
+    for (let y = view.oy; y < h; y += pxCell) { ectx.beginPath(); ectx.moveTo(0, y); ectx.lineTo(w, y); ectx.stroke(); }
+    for (let y = view.oy - pxCell; y > 0; y -= pxCell) { ectx.beginPath(); ectx.moveTo(0, y); ectx.lineTo(w, y); ectx.stroke(); }
+    ectx.globalAlpha = 1;
+  }
+  const guides = [["ascender", m.asc], ["cap height", m.cap], ["x-height", m.x], ["baseline", 0], ["descender", m.desc]];
+  ectx.font = "11px " + css("--sans"); ectx.textBaseline = "bottom";
+  for (const [name, gy] of guides) {
+    const y = toPx({ x: 0, y: gy }).y;
+    ectx.strokeStyle = gy === 0 ? css("--guide-strong") : css("--guide"); ectx.lineWidth = gy === 0 ? 1.5 : 1;
+    ectx.setLineDash(name === "cap height" ? [4, 4] : []);
+    ectx.beginPath(); ectx.moveTo(0, y); ectx.lineTo(w, y); ectx.stroke(); ectx.setLineDash([]);
+    ectx.fillStyle = css("--guide"); ectx.fillText(name, 6, y - 2);
+  }
+  ectx.strokeStyle = css("--guide"); ectx.lineWidth = 1;
+  for (const gx of [0, m.adv]) { const x = toPx({ x: gx, y: 0 }).x; ectx.beginPath(); ectx.moveTo(x, 0); ectx.lineTo(x, h); ectx.stroke(); }
+  ectx.fillStyle = css("--faint"); ectx.textBaseline = "top"; ectx.fillText(`${glyphTitle(state.current)}  ·  advance ${m.adv}`, toPx({ x: m.adv, y: 0 }).x + 8, 8);
+
+  // derived stems (hint mode)
+  if (state.mode === "hint") {
+    const d = derivedHints(g);
+    ectx.fillStyle = css("--thick-bg"); ectx.strokeStyle = css("--thick"); ectx.setLineDash([5, 3]); ectx.lineWidth = 1;
+    for (const st of d.v) { const x0 = toPx({ x: st.lo, y: 0 }).x, x1 = toPx({ x: st.hi, y: 0 }).x; ectx.fillRect(x0, 0, x1 - x0, h); ectx.beginPath(); ectx.moveTo(x0, 0); ectx.lineTo(x0, h); ectx.moveTo(x1, 0); ectx.lineTo(x1, h); ectx.stroke(); }
+    for (const st of d.h) { const y0 = toPx({ x: 0, y: st.hi }).y, y1 = toPx({ x: 0, y: st.lo }).y; ectx.fillRect(0, y0, w, y1 - y0); ectx.beginPath(); ectx.moveTo(0, y0); ectx.lineTo(w, y0); ectx.moveTo(0, y1); ectx.lineTo(w, y1); ectx.stroke(); }
+    ectx.setLineDash([]);
+  }
+  if (state.showFill) {
+    ectx.fillStyle = css("--skel-fill"); ectx.beginPath();
+    for (const c of outline(g)) { c.forEach((p, i) => { const q = toPx(p); i ? ectx.lineTo(q.x, q.y) : ectx.moveTo(q.x, q.y); }); ectx.closePath(); }
+    ectx.fill("nonzero");
+  }
+  if (state.showSkel) {
+    for (const path of g.paths) {
+      const n = path.nodes; if (!n.length) continue;
+      ectx.strokeStyle = css("--skel"); ectx.lineWidth = 2; ectx.beginPath();
+      const p0 = toPx(n[0]); ectx.moveTo(p0.x, p0.y);
+      const count = path.closed ? n.length : n.length - 1;
+      for (let i = 0; i < count; i++) {
+        const a = n[i], b = n[(i + 1) % n.length];
+        if (!a.cout && !b.cin) { const q = toPx(b); ectx.lineTo(q.x, q.y); }
+        else { const c1 = toPx(a.cout || a), c2 = toPx(b.cin || b), q = toPx(b); ectx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, q.x, q.y); }
+      }
+      ectx.stroke();
+      if (state.mode === "skeleton") {
+        ectx.strokeStyle = css("--handle"); ectx.fillStyle = css("--handle"); ectx.lineWidth = 1; ectx.setLineDash([3, 3]);
+        for (const nd of n) for (const c of [nd.cin, nd.cout]) if (c) { const a = toPx(nd), b = toPx(c); ectx.beginPath(); ectx.moveTo(a.x, a.y); ectx.lineTo(b.x, b.y); ectx.stroke(); ectx.fillRect(b.x - 3, b.y - 3, 6, 6); }
+        ectx.setLineDash([]);
+      }
+      for (const nd of n) {
+        const p = toPx(nd), isSel = state.sel && state.sel.node === nd, hinted = state.mode === "hint" && g.hints[nd.id];
+        if (hinted) {
+          ectx.fillStyle = css("--thick-bg"); ectx.beginPath(); ectx.arc(p.x, p.y, 13, 0, 7); ectx.fill();
+          ectx.strokeStyle = css("--thick"); ectx.lineWidth = 1.5;
+          if (hinted.x) arrow(ectx, p.x, p.y, 1, 0, 11, hinted.x);
+          if (hinted.y) arrow(ectx, p.x, p.y, 0, -1, 11, hinted.y);   // canvas y is down; "pos" means up
+        }
+        ectx.fillStyle = hinted ? css("--thick") : isSel ? css("--skel") : css("--panel"); ectx.strokeStyle = hinted ? css("--thick") : css("--skel"); ectx.lineWidth = 1.5;
+        ectx.beginPath();
+        if (nd.kind === "smooth") ectx.arc(p.x, p.y, 4.5, 0, 7); else ectx.rect(p.x - 4, p.y - 4, 8, 8);
+        ectx.fill(); ectx.stroke();
+      }
+      if (state.mode === "thicken") {
+        for (const th of thicknessHandles(path)) {
+          const a = toPx(th.node), b = toPx(th.pos);
+          ectx.strokeStyle = css("--thick"); ectx.lineWidth = 1.5; ectx.beginPath(); ectx.moveTo(a.x, a.y); ectx.lineTo(b.x, b.y); ectx.stroke();
+          ectx.fillStyle = css("--thick"); ectx.beginPath(); ectx.arc(b.x, b.y, 5, 0, 7); ectx.fill();
+          if ((th.node[th.side] != null && th.node[th.side] !== 1) || th.node.ang) { ectx.strokeStyle = css("--panel"); ectx.lineWidth = 1.5; ectx.beginPath(); ectx.arc(b.x, b.y, 2.3, 0, 7); ectx.stroke(); }
+        }
+        for (const ch of capHandles(path)) {
+          const a = toPx(ch.node), b = toPx(ch.pos);
+          ectx.strokeStyle = css("--thick"); ectx.lineWidth = 1.5; ectx.setLineDash([2, 2]); ectx.beginPath(); ectx.moveTo(a.x, a.y); ectx.lineTo(b.x, b.y); ectx.stroke(); ectx.setLineDash([]);
+          ectx.fillStyle = ch.node.cap ? css("--thick") : css("--panel"); ectx.strokeStyle = css("--thick");
+          ectx.beginPath(); ectx.rect(b.x - 4.5, b.y - 4.5, 9, 9); ectx.fill(); ectx.stroke();
+        }
+      }
+    }
+    if (state.drawing && state.hover && state.mode === "skeleton" && !state.drag) {
+      const last = state.drawing.nodes[state.drawing.nodes.length - 1], a = toPx(last), b = toPx(state.hover);
+      ectx.strokeStyle = css("--skel"); ectx.globalAlpha = 0.4; ectx.setLineDash([4, 4]); ectx.beginPath(); ectx.moveTo(a.x, a.y); ectx.lineTo(b.x, b.y); ectx.stroke(); ectx.setLineDash([]); ectx.globalAlpha = 1;
+    }
+  }
+  const hints = Object.keys(g.hints).length;
+  $("#pathInfo").textContent = `${g.paths.length} path${g.paths.length === 1 ? "" : "s"} · ${g.paths.reduce((s, p) => s + p.nodes.length, 0)} nodes · ${hints} hint point${hints === 1 ? "" : "s"}`;
+}
+function thicknessHandles(path) {
+  const res = [];
+  path.nodes.forEach((nd, i) => {
+    const t = tangentAt(path, i), left0 = { x: -t.y, y: t.x }, left = rot(left0, nd.ang);
+    res.push({ node: nd, side: "left", pos: { x: nd.x + left.x * halfL(nd), y: nd.y + left.y * halfL(nd) }, dir: left, dir0: left0 });
+    res.push({ node: nd, side: "right", pos: { x: nd.x - left.x * halfR(nd), y: nd.y - left.y * halfR(nd) }, dir: { x: -left.x, y: -left.y }, dir0: { x: -left0.x, y: -left0.y } });
+  });
+  return res;
+}
+// Cap handles sit on the outward tangent of each open-path end: at the node when flat, further out when convex.
+function capHandles(path) {
+  if (path.closed || path.nodes.length < 2) return [];
+  const n = path.nodes, res = [];
+  for (const [i, sign] of [[0, -1], [n.length - 1, 1]]) {
+    const t = tangentAt(path, i), out = rot({ x: t.x * sign, y: t.y * sign }, n[i].ang);
+    res.push({ node: n[i], out, pos: { x: n[i].x + out.x * n[i].cap, y: n[i].y + out.y * n[i].cap } });
+  }
+  return res;
+}
+
+/* ---------- hit testing & interaction ---------- */
+const HIT = 8;
+function hitNode(px) {
+  for (const path of glyph().paths) for (let i = 0; i < path.nodes.length; i++) { const nd = path.nodes[i], q = toPx(nd); if (Math.hypot(q.x - px.x, q.y - px.y) < HIT) return { path, node: nd, index: i }; }
+  return null;
+}
+function hitHandle(px) {
+  for (const path of glyph().paths) for (const nd of path.nodes) for (const k of ["cin", "cout"]) if (nd[k]) { const q = toPx(nd[k]); if (Math.hypot(q.x - px.x, q.y - px.y) < HIT) return { node: nd, key: k }; }
+  return null;
+}
+function hitThickness(px) {
+  for (const path of glyph().paths) for (const th of thicknessHandles(path)) { const q = toPx(th.pos); if (Math.hypot(q.x - px.x, q.y - px.y) < HIT) return th; }
+  return null;
+}
+function hitCap(px) {
+  for (const path of glyph().paths) for (const ch of capHandles(path)) { const q = toPx(ch.pos); if (Math.hypot(q.x - px.x, q.y - px.y) < HIT) return ch; }
+  return null;
+}
+// Nearest point on any segment, for inserting a node in Hint mode.
+function hitSegment(px) {
+  let best = null;
+  for (const path of glyph().paths) {
+    const n = path.nodes, count = path.closed ? n.length : n.length - 1;
+    for (let i = 0; i < count; i++) {
+      const a = n[i], b = n[(i + 1) % n.length], isLine = !a.cout && !b.cin, c1 = a.cout || a, c2 = b.cin || b;
+      for (let s = 1; s < 32; s++) {
+        const t = s / 32, p = isLine ? { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } : bez(a, c1, c2, b, t), q = toPx(p);
+        const dist = Math.hypot(q.x - px.x, q.y - px.y);
+        if (dist < HIT && (!best || dist < best.dist)) best = { path, i, t, dist, isLine };
+      }
+    }
+  }
+  return best;
+}
+// Insert a node at parameter t of segment i without changing the shape (de Casteljau split).
+function insertNode(path, i, t, isLine) {
+  const n = path.nodes, a = n[i], b = n[(i + 1) % n.length];
+  let nd;
+  if (isLine) {
+    const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    nd = node(Math.round(p.x * 4) / 4, Math.round(p.y * 4) / 4);
+  } else {
+    const p0 = a, p1 = a.cout || a, p2 = b.cin || b, p3 = b;
+    const lerp = (u, v) => ({ x: u.x + (v.x - u.x) * t, y: u.y + (v.y - u.y) * t });
+    const q0 = lerp(p0, p1), q1 = lerp(p1, p2), q2 = lerp(p2, p3), r0 = lerp(q0, q1), r1 = lerp(q1, q2), m = lerp(r0, r1);
+    nd = node(m.x, m.y, { kind: "smooth", cin: r0, cout: r1 });
+    a.cout = q0; b.cin = q2;
+  }
+  n.splice(i + 1, 0, nd);
+  return { node: nd, index: i + 1 };
+}
+function finishDrawing() {
+  if (state.drawing) { if (state.drawing.nodes.length < 2) glyph().paths = glyph().paths.filter(p => p !== state.drawing); }
+  state.drawing = null; renderAll();
+}
+function evPos(e) { const r = ed.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
+ed.addEventListener("pointerdown", e => {
+  ed.setPointerCapture(e.pointerId);
+  const px = evPos(e), gp = snap(toGrid(px.x, px.y), e.shiftKey), g = glyph();
+  if (state.mode === "skeleton") {
+    const hh = hitHandle(px);
+    if (!state.drawing && hh) { pushHistory(); state.drag = { type: "handle", ...hh, alt: e.altKey }; return; }
+    const hn = hitNode(px);
+    if (state.drawing) {
+      const nodes = state.drawing.nodes, last = nodes[nodes.length - 1];
+      if (hn && hn.node === nodes[0] && nodes.length > 2) { pushHistory(); state.drawing.closed = true; finishDrawing(); return; }
+      if (last.x === gp.x && last.y === gp.y) { finishDrawing(); return; }
+      pushHistory();
+      const nd = node(gp.x, gp.y); nodes.push(nd);
+      state.drag = { type: "pen", node: nd, path: state.drawing, start: gp };
+      return;
+    }
+    if (hn) { pushHistory(); state.sel = hn; state.drag = { type: "move", ...hn, start: gp }; draw(); return; }
+    pushHistory();
+    const nd = node(gp.x, gp.y), path = { closed: false, nodes: [nd] };
+    g.paths.push(path); state.drawing = path; state.sel = { path, node: nd };
+    state.drag = { type: "pen", node: nd, path, start: gp };
+  } else if (state.mode === "thicken") {
+    const ch = hitCap(px), th = ch ? null : hitThickness(px);
+    if (ch) { pushHistory(); state.drag = { type: "cap", ch }; }
+    else if (th) { pushHistory(); state.drag = e.altKey ? { type: "angle", th } : { type: "thick", th, both: e.metaKey }; }
+  } else if (state.mode === "hint") {
+    hideMenu();
+    if (e.button === 2) return;
+    let hn = hitNode(px);
+    if (!hn) {
+      const hs = hitSegment(px);
+      if (!hs) return;
+      pushHistory();
+      const ins = insertNode(hs.path, hs.i, hs.t, hs.isLine);
+      hn = { path: hs.path, node: ins.node, index: ins.index };
+      g.hints[hn.node.id] = defaultHint(hs.path, ins.index);
+      $("#hintMsg").textContent = "Node inserted on the stroke and hinted — drag it to push toward a pixel edge";
+      state.drag = { type: "hint", ...hn, start: px, was: g.hints[hn.node.id], moved: false, inserted: true };
+      return;
+    }
+    pushHistory();
+    if (e.altKey) { g.hints[hn.node.id] = defaultHint(hn.path, hn.index); $("#hintMsg").textContent = "Reset to nearest"; renderAll(); return; }
+    // Click toggles; a drag (handled in pointermove) sets the push direction instead.
+    state.drag = { type: "hint", ...hn, start: px, was: g.hints[hn.node.id] || null, moved: false };
+  }
+});
+ed.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  if (state.mode !== "hint") return;
+  const px = evPos(e), hn = hitNode(px); if (!hn) return;
+  showMenu(e.clientX, e.clientY, hn);
+});
+/* ---- small context menu for exact hint settings (a stock NSMenu in the real app) ---- */
+const menu = document.createElement("div");
+menu.style.cssText = "position:absolute;z-index:10;background:var(--panel);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;font-size:12px;min-width:170px";
+menu.hidden = true; document.body.appendChild(menu);
+function hideMenu() { menu.hidden = true; }
+function showMenu(cx, cy, hn) {
+  const g = glyph(), cur = g.hints[hn.node.id] || { x: null, y: null };
+  menu.innerHTML = "";
+  const item = (label, on, fn) => { const b = el("button", "", (on ? "✓ " : " ") + label); b.type = "button"; b.style.cssText = "display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);padding:4px 8px;border-radius:5px;font:inherit;cursor:pointer"; b.onmouseenter = () => b.style.background = "var(--sel)"; b.onmouseleave = () => b.style.background = "transparent"; b.onclick = () => { pushHistory(); fn(); hideMenu(); renderAll(); }; menu.appendChild(b); };
+  const head = t => { const h = el("div", "", t); h.style.cssText = "color:var(--faint);padding:4px 8px 2px;font-size:11px;letter-spacing:.04em;text-transform:uppercase"; menu.appendChild(h); };
+  const set = (axis, mode) => () => { const h = g.hints[hn.node.id] || { x: null, y: null }; h[axis] = mode; if (!h.x && !h.y) delete g.hints[hn.node.id]; else g.hints[hn.node.id] = h; };
+  head("Horizontal (x)");
+  item("Off", !cur.x, set("x", null)); item("Nearest pixel edge", cur.x === "near", set("x", "near")); item("Push left", cur.x === "neg", set("x", "neg")); item("Push right", cur.x === "pos", set("x", "pos"));
+  head("Vertical (y)");
+  item("Off", !cur.y, set("y", null)); item("Nearest pixel edge", cur.y === "near", set("y", "near")); item("Push down", cur.y === "neg", set("y", "neg")); item("Push up", cur.y === "pos", set("y", "pos"));
+  const sep = el("div"); sep.style.cssText = "border-top:1px solid var(--line);margin:4px 0"; menu.appendChild(sep);
+  item("Remove hint", false, () => { delete g.hints[hn.node.id]; });
+  item("Delete node", false, () => { hn.path.nodes = hn.path.nodes.filter(n => n !== hn.node); delete g.hints[hn.node.id]; if (hn.path.nodes.length < 2) g.paths = g.paths.filter(p => p !== hn.path); });
+  menu.style.left = (cx + window.scrollX + 4) + "px"; menu.style.top = (cy + window.scrollY + 4) + "px"; menu.hidden = false;
+}
+window.addEventListener("pointerdown", e => { if (!menu.contains(e.target)) hideMenu(); }, true);
+ed.addEventListener("pointermove", e => {
+  const px = evPos(e), raw = toGrid(px.x, px.y), gp = snap(raw, e.shiftKey);
+  state.hover = gp;
+  $("#cursorPos").textContent = `(${gp.x}, ${gp.y})`;
+  const d = state.drag;
+  if (!d) { if (state.drawing) draw(); return; }
+  if (d.type === "pen") {
+    const dist = Math.hypot(gp.x - d.start.x, gp.y - d.start.y);
+    if (dist >= 0.5) { d.node.kind = "smooth"; d.node.cout = { x: gp.x, y: gp.y }; d.node.cin = e.altKey ? d.node.cin : { x: 2 * d.node.x - gp.x, y: 2 * d.node.y - gp.y }; }
+    else { d.node.kind = "corner"; d.node.cout = null; d.node.cin = null; }
+  } else if (d.type === "move") {
+    const dx = gp.x - d.node.x, dy = gp.y - d.node.y;
+    d.node.x = gp.x; d.node.y = gp.y;
+    for (const k of ["cin", "cout"]) if (d.node[k]) { d.node[k].x += dx; d.node[k].y += dy; }
+  } else if (d.type === "handle") {
+    d.node[d.key] = { x: gp.x, y: gp.y };
+    const other = d.key === "cin" ? "cout" : "cin";
+    if (d.node.kind === "smooth" && !d.alt && d.node[other]) {
+      const len = Math.hypot(d.node[other].x - d.node.x, d.node[other].y - d.node.y), dir = norm({ x: d.node.x - gp.x, y: d.node.y - gp.y });
+      d.node[other] = { x: d.node.x + dir.x * len, y: d.node.y + dir.y * len };
+    }
+  } else if (d.type === "thick") {
+    const th = d.th, v = { x: raw.x - th.node.x, y: raw.y - th.node.y };
+    const t = Math.max(0, Math.round((v.x * th.dir.x + v.y * th.dir.y) * 4) / 4);   // 0 = edge sits on the skeleton line
+    const ratio = t / (state.weight / 2);
+    th.node[th.side] = ratio; if (d.both) th.node[th.side === "left" ? "right" : "left"] = ratio;
+  } else if (d.type === "angle") {
+    // Rotate the cross-section so the handle points at the cursor; 15° steps, ±75° max.
+    const th = d.th, v = { x: raw.x - th.node.x, y: raw.y - th.node.y };
+    let deg = Math.atan2(th.dir0.x * v.y - th.dir0.y * v.x, th.dir0.x * v.x + th.dir0.y * v.y) * 180 / Math.PI;
+    th.node.ang = Math.max(-75, Math.min(75, Math.round(deg / 15) * 15));
+    $("#hintMsg").textContent = "";
+  } else if (d.type === "cap") {
+    const ch = d.ch, v = { x: raw.x - ch.node.x, y: raw.y - ch.node.y };
+    ch.node.cap = Math.max(0, Math.round((v.x * ch.out.x + v.y * ch.out.y) * 4) / 4);
+  } else if (d.type === "hint") {
+    const dx = px.x - d.start.x, dy = -(px.y - d.start.y), dist = Math.hypot(dx, dy);
+    if (dist > 12) {
+      d.moved = true;
+      // Push toward the dragged direction; an axis with little movement keeps its current setting.
+      const h = Object.assign({ x: null, y: null }, d.was || defaultHint(d.path, d.index));
+      if (Math.abs(dx) > 0.4 * dist) h.x = dx > 0 ? "pos" : "neg";
+      if (Math.abs(dy) > 0.4 * dist) h.y = dy > 0 ? "pos" : "neg";
+      glyph().hints[d.node.id] = h;
+      $("#hintMsg").textContent = `Push ${[h.x === "pos" ? "right" : h.x === "neg" ? "left" : null, h.y === "pos" ? "up" : h.y === "neg" ? "down" : null].filter(Boolean).join(" + ") || "—"}  ·  ⌥‑click resets to nearest`;
+    }
+  }
+  renderAll(true);
+});
+ed.addEventListener("pointerup", () => {
+  const d = state.drag; if (!d) return;
+  if (d.type === "hint" && !d.moved && !d.inserted) {
+    const g = glyph();
+    if (d.was) { delete g.hints[d.node.id]; $("#hintMsg").textContent = "Hint removed"; }
+    else { g.hints[d.node.id] = defaultHint(d.path, d.index); $("#hintMsg").textContent = "Hint added (nearest pixel edge) — drag to push it up/down/left/right, right‑click for options"; }
+  }
+  state.drag = null; renderAll();
+});
+ed.addEventListener("dblclick", e => {
+  e.preventDefault();
+  if (state.drawing) { finishDrawing(); return; }
+  if (state.mode === "thicken") {
+    const px = evPos(e), ch = hitCap(px), th = ch ? null : hitThickness(px);
+    if (ch) { pushHistory(); ch.node.cap = 0; renderAll(); }
+    else if (th) { pushHistory(); th.node.left = th.node.right = null; th.node.ang = 0; renderAll(); }
+  }
+});
+window.addEventListener("keydown", e => {
+  if (["TEXTAREA", "INPUT", "SELECT"].includes(e.target.tagName)) return;
+  if (e.key === "Escape" || e.key === "Enter") { finishDrawing(); draw(); }
+  if ((e.key === "Backspace" || e.key === "Delete") && state.sel && !state.drawing && state.mode === "skeleton") {
+    pushHistory();
+    const { path, node: nd } = state.sel; path.nodes = path.nodes.filter(n => n !== nd); delete glyph().hints[nd.id];
+    if (path.nodes.length < 2) glyph().paths = glyph().paths.filter(p => p !== path);
+    state.sel = null; renderAll();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === "z") { e.preventDefault(); undo(); }
+  if (e.key === "1") setMode("skeleton"); if (e.key === "2") setMode("thicken"); if (e.key === "3") setMode("hint");
+});
+
+/* ---------- toolbar / sidebar wiring ---------- */
+const HELP = {
+  skeleton: "<kbd>click</kbd> straight line &nbsp; <kbd>click‑drag</kbd> curve (pulls out handles; <kbd>⌥</kbd> breaks symmetry) &nbsp; <kbd>double‑click</kbd> or click the last node again to finish &nbsp; click the first node to close &nbsp; <kbd>⇧</kbd> half‑grid &nbsp; drag nodes/handles to adjust &nbsp; <kbd>⌫</kbd> deletes the selected node &nbsp; <kbd>esc</kbd> finish",
+  thicken: "<kbd>drag</kbd> a round handle to set that side's thickness (¼‑grid steps) — it's stored as a ratio of the default weight, so the Weight slider still scales it; all the way onto the node = 0, so the skeleton line is the edge and a stroke on the baseline stays on it. <kbd>⌘‑drag</kbd> sets both sides. <kbd>⌥‑drag</kbd> rotates the cross‑section for angled terminals (<code>c s r y</code>), 15° steps. The square handle at each stroke end sets the cap: on the node = flat (default), drag outward = convex. <kbd>double‑click</kbd> any handle to reset it. Ringed handles have an override.",
+  hint: "<kbd>click</kbd> a node to hint it (click again to remove); <kbd>click</kbd> anywhere on a stroke to insert a new node there and hint it. A double‑headed arrow = the stroke edge snaps to the <em>nearest</em> pixel boundary on that axis (default: vertical strokes snap x, horizontal snap y, corners both). <kbd>drag</kbd> a hint point up / down / left / right to <em>push</em> that edge to the next pixel boundary in that direction (single‑headed arrow) — e.g. push the top of the <code>n</code> shoulder up so the arch fills the x‑height row. <kbd>right‑click</kbd> for exact options, <kbd>⌥‑click</kbd> resets to nearest. Edges near a guide (baseline, x‑height, cap…) snap to it. <em>Auto‑detect</em> hints every vertical/horizontal node; <kbd>⌘Z</kbd> undoes.",
+};
+function setMode(m) {
+  state.mode = m; finishDrawing();
+  document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+  $("#hintBar").hidden = m !== "hint"; $("#hintMsg").textContent = "";
+  $("#help").innerHTML = HELP[m];
+  if (m === "hint" && !state.showPix) { state.showPix = true; $("#showPix").checked = true; }
+  resize();
+}
+$("#modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.mode); });
+$("#weight").addEventListener("input", e => { state.weight = +e.target.value; $("#weightVal").textContent = state.weight.toFixed(2); renderAll(); });
+$("#halfSnap").addEventListener("change", e => state.halfSnap = e.target.checked);
+$("#undoBtn").addEventListener("click", undo);
+$("#clearBtn").addEventListener("click", () => { pushHistory(); glyph().paths = []; glyph().hints = {}; state.drawing = null; renderAll(); });
+for (const [id, key] of [["mAsc", "asc"], ["mCap", "cap"], ["mX", "x"], ["mDesc", "desc"], ["mAdv", "adv"], ["mLine", "line"]])
+  $("#" + id).addEventListener("change", e => { state.metrics[key] = +e.target.value; resize(); renderAll(); });
+$("#refFont").addEventListener("change", e => { state.refFont = e.target.value; renderAll(); });
+$("#gasp").addEventListener("change", e => { state.gasp = +e.target.value; renderAll(); });
+$("#lcd").addEventListener("change", e => { state.lcd = e.target.checked; renderAll(); });
+$("#showFill").addEventListener("change", e => { state.showFill = e.target.checked; draw(); });
+$("#showSkel").addEventListener("change", e => { state.showSkel = e.target.checked; draw(); });
+$("#showPix").addEventListener("change", e => { state.showPix = e.target.checked; draw(); });
+$("#pixPpem").addEventListener("input", e => { state.pixPpem = +e.target.value; $("#pixPpemVal").textContent = e.target.value; draw(); });
+$("#pSize").addEventListener("input", e => { $("#pSizeVal").textContent = e.target.value; renderText(); });
+$("#pRenderer").addEventListener("change", renderText);
+$("#pText").addEventListener("input", renderText);
+$("#autoHints").addEventListener("click", () => {
+  pushHistory(); const g = glyph(); let n = 0;
+  for (const path of g.paths) path.nodes.forEach((nd, i) => {
+    const { tin, tout } = tangents(path, i);
+    const straight = t => t && (Math.abs(t.x) < 0.35 || Math.abs(t.y) < 0.35);
+    if (straight(tin) || straight(tout)) { g.hints[nd.id] = defaultHint(path, i); n++; }
+  });
+  $("#hintMsg").textContent = `${n} hint point${n === 1 ? "" : "s"} assigned — ⌘Z to undo`; renderAll();
+});
+$("#clearHints").addEventListener("click", () => { pushHistory(); glyph().hints = {}; $("#hintMsg").textContent = "Hints removed — ⌘Z to undo"; renderAll(); });
+function renderGlyphGrid() {
+  const wrap = $("#glyphGrid"); wrap.innerHTML = "";
+  for (const ch of GLYPH_ORDER) {
+    const g = state.glyphs[ch], drawn = g && g.paths.some(p => p.nodes.length >= 2);
+    const b = el("button", (state.complete.has(ch) ? "complete " : drawn ? "done " : "") + (ch === state.current ? "sel" : ""), glyphLabel(ch));
+    b.type = "button"; b.title = `${glyphTitle(ch)} · double‑click to mark ${state.complete.has(ch) ? "incomplete" : "complete"}`;
+    b.addEventListener("click", () => { finishDrawing(); state.current = ch; state.sel = null; history.length = 0; renderAll(); });
+    b.addEventListener("dblclick", () => { if (state.complete.has(ch)) state.complete.delete(ch); else state.complete.add(ch); renderGlyphGrid(); });
+    wrap.appendChild(b);
+  }
+}
+let stripTimer = null;
+function renderAll(light) {
+  draw();
+  if (light) { clearTimeout(stripTimer); stripTimer = setTimeout(() => { renderStrip(); renderText(); }, 40); return; }
+  renderGlyphGrid(); renderStrip(); renderText();
+}
+window.addEventListener("resize", () => { resize(); renderText(); });
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => renderAll());
+setMode("skeleton");
+renderAll();
+})();
+</script>
