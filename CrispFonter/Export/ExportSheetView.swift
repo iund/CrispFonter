@@ -45,11 +45,15 @@ struct ExportSheetView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         var project = doc.project
         project.export = options
+        CrashLogger.breadcrumb("export start: \(project.glyphs.count) glyphs, includeHints=\(options.includeHints)")
         let data = TrueTypeWriter.write(project: project)
+        CrashLogger.breadcrumb("export TrueTypeWriter.write done: \(data.count) bytes")
         do {
             try data.write(to: url)
+            CrashLogger.breadcrumb("export write to disk done")
             dismiss()
         } catch {
+            CrashLogger.breadcrumb("export write to disk failed: \(error)")
             errorMessage = error.localizedDescription
         }
     }

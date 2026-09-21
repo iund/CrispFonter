@@ -8,6 +8,7 @@ struct GlyphCanvasRepresentable: NSViewRepresentable {
         let view = GlyphCanvasView()
         view.doc = doc
         view.editor = editor
+        editor.canvasView = view
         return view
     }
 

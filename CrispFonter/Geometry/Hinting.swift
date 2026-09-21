@@ -4,6 +4,22 @@ import Foundation
 /// Build spec §6.
 enum Hinting {
 
+    /// Hints every node whose incoming or outgoing tangent is near-vertical/horizontal, at its
+    /// default (nearest) hint. Shared by the Hint-mode toolbar button and its ⇧⏎ shortcut.
+    /// Returns the number of nodes hinted.
+    @discardableResult
+    static func autoDetect(_ g: inout Glyph) -> Int {
+        var count = 0
+        for path in g.paths {
+            for (i, nd) in path.nodes.enumerated() {
+                let t = tangents(path, i)
+                func straight(_ v: GridPoint?) -> Bool { guard let v else { return false }; return abs(v.x) < 0.35 || abs(v.y) < 0.35 }
+                if straight(t.tin) || straight(t.tout) { g.hints[nd.id] = defaultHint(path, i); count += 1 }
+            }
+        }
+        return count
+    }
+
     struct Tangents { var tin: GridPoint?; var tout: GridPoint? }
 
     static func tangents(_ path: SkeletonPath, _ i: Int) -> Tangents {

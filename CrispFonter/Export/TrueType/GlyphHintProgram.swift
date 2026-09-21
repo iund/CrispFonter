@@ -25,7 +25,10 @@ enum GlyphHintProgram {
                 guard let hint = glyph.hints[node.id], let mode = y ? hint.y : hint.x else { continue }
                 guard let idx = pointForNode[node.id] else { continue }
                 let (e1, e2) = Hinting.edgesAt(path, i, weight: project.defaultWeight)
-                let v1 = y ? e1.y : e1.x, v2 = y ? e2.y : e2.x
+                // Zone-matching must see the same vertically-biased position the outline is exported
+                // at, or a stem meant to land on a zone after the nudge won't be recognized as one.
+                let bias = y ? project.verticalBias : 0
+                let v1 = (y ? e1.y : e1.x) + bias, v2 = (y ? e2.y : e2.x) + bias
                 if abs(v1 - v2) > 0.1 {
                     touchedAny = touchStem(&p, left: idx.left, right: idx.right, v1: v1, v2: v2, mode: mode, y: y, cvt: cvt, project: project) || touchedAny
                 } else {

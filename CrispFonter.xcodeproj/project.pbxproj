@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		A1000010 /* CrispFonter.app in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000001 /* CrispFonter.app */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		A1000011 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;

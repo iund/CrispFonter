@@ -4,6 +4,7 @@ extension GlyphCanvasView {
     func hintDown(_ event: NSEvent, _ px: CGPoint) {
         hideHintMenu()
         if let hn = hitNode(px) {
+            selection = (hn.pathID, hn.nodeID)
             if event.modifierFlags.contains(.option) {
                 mutateWorking { g in
                     guard let pi = g.pathIndex(hn.pathID) else { return }
@@ -23,8 +24,56 @@ extension GlyphCanvasView {
             guard let pi = g.pathIndex(hs.pathID), let ni = g.nodeIndex(hs.pathID, newID) else { return }
             g.hints[newID] = Hinting.defaultHint(g.paths[pi], ni)
         }
+        selection = (hs.pathID, newID)
         editor.hintMessage = "Node inserted on the stroke and hinted — drag it to push toward a pixel edge"
         drag = .hint(pathID: hs.pathID, nodeID: newID, index: 0, start: px, was: nil, inserted: true, moved: false)
+    }
+
+    /// Space cycles the selected node's hint between nearest (both axes), nearest-vertical-only
+    /// and nearest-horizontal-only; arrow keys set a push direction per axis (held together for
+    /// diagonals, the same as dragging one); backspace clears it; ⇧⏎ auto-hints the whole glyph.
+    func hintKeyDown(_ event: NSEvent, _ flags: NSEvent.ModifierFlags) {
+        switch event.keyCode {
+        case KeyCode.space: cycleHintType()
+        case KeyCode.backspace, KeyCode.forwardDelete: removeSelectedHint()
+        case KeyCode.enter where flags.contains(.shift): autoHintCurrentGlyph()
+        case KeyCode.left, KeyCode.right, KeyCode.up, KeyCode.down: setDirectionalHintFromHeldArrows()
+        default: break
+        }
+    }
+
+    private func cycleHintType() {
+        guard let sel = selection else { return }
+        mutateWorking { g in
+            let cur = g.hints[sel.nodeID]
+            let next: HintPoint
+            if cur?.x == .nearest, cur?.y == .nearest { next = HintPoint(x: nil, y: .nearest) }
+            else if cur?.y == .nearest, cur?.x == nil { next = HintPoint(x: .nearest, y: nil) }
+            else { next = HintPoint(x: .nearest, y: .nearest) }
+            g.hints[sel.nodeID] = next
+        }
+        commit("Cycle Hint Type")
+    }
+
+    private func removeSelectedHint() {
+        guard let sel = selection else { return }
+        mutateWorking { g in g.hints[sel.nodeID] = nil }
+        commit("Remove Hint")
+    }
+
+    private func autoHintCurrentGlyph() {
+        mutateWorking { g in _ = Hinting.autoDetect(&g) }
+        commit("Auto-detect Hints")
+    }
+
+    private func setDirectionalHintFromHeldArrows() {
+        guard let sel = selection else { return }
+        var h = HintPoint(x: nil, y: nil)
+        if heldArrowKeys.contains("right") { h.x = .positive } else if heldArrowKeys.contains("left") { h.x = .negative }
+        if heldArrowKeys.contains("up") { h.y = .positive } else if heldArrowKeys.contains("down") { h.y = .negative }
+        guard h.x != nil || h.y != nil else { return }
+        mutateWorking { g in g.hints[sel.nodeID] = h }
+        commit("Directional Hint")
     }
 
     func dragHint(_ pathID: UUID, _ nodeID: UUID, _ index: Int, _ start: CGPoint, _ was: HintPoint?, _ inserted: Bool, _ px: CGPoint) {

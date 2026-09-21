@@ -18,12 +18,31 @@ struct SidebarView: View {
                 GlyphGridView(doc: doc, editor: editor)
 
                 Section("Metrics (grid units)") {
-                    metricRow("Ascender", \.ascender)
-                    metricRow("Cap height", \.capHeight)
-                    metricRow("x-height", \.xHeight)
-                    metricRow("Descender", \.descender)
-                    metricRow("Advance width", \.defaultAdvance)
-                    metricRow("Line height", \.lineHeight)
+                    metricRow("Ascender", \.ascender, range: 0...20)
+                    metricRow("Cap height", \.capHeight, range: 0...20)
+                    metricRow("x-height", \.xHeight, range: 0...20)
+                    metricRow("Descender", \.descender, range: -10...0)
+                    metricRow("Advance width", \.defaultAdvance, range: 1...20)
+                    metricRow("Line height", \.lineHeight, range: 0...30)
+                }
+
+                Section("Pixels per em") {
+                    HStack {
+                        Slider(value: $editor.pixPpem, in: 6...18, step: 0.5)
+                        Text("\(editor.pixPpem, specifier: "%.1f") pt").monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                }
+
+                Section("Vertical alignment bias") {
+                    HStack {
+                        Slider(value: verticalBiasBinding, in: -2...2, step: biasStep)
+                        Text(String(format: "%.2f", doc.project.verticalBias))
+                            .monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                    Toggle("Snap to pixel grid (\(Int(editor.pixPpem)) pt)", isOn: $editor.snapBiasToPixel)
+                        .font(.caption)
+                    Text("Shifts every glyph up/down without touching its points — previews and export reflect it too.")
+                        .font(.caption2).foregroundStyle(.tertiary)
                 }
 
                 Section("Reference font") {
@@ -38,10 +57,6 @@ struct SidebarView: View {
                 }
 
                 Section("Rendering model") {
-                    Toggle("Subpixel (RGB stripes)", isOn: Binding(
-                        get: { doc.project.previewLCD },
-                        set: { v in doc.mutate(undoManager: undoManager) { $0.previewLCD = v } }
-                    ))
                     HStack {
                         Text("1-bit below")
                         Stepper(value: Binding(
@@ -60,17 +75,27 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private func metricRow(_ label: String, _ key: WritableKeyPath<Metrics, Int>) -> some View {
+    private func metricRow(_ label: String, _ key: WritableKeyPath<Metrics, Int>, range: ClosedRange<Double>) -> some View {
         HStack {
-            Text(label)
-            Spacer()
-            TextField("", value: Binding(
-                get: { doc.project.metrics[keyPath: key] },
-                set: { v in doc.mutate("Metrics", undoManager: undoManager) { $0.metrics[keyPath: key] = v } }
-            ), formatter: NumberFormatter())
-            .frame(width: 52)
-            .multilineTextAlignment(.trailing)
+            Text(label).frame(width: 96, alignment: .leading)
+            Slider(value: Binding(
+                get: { Double(doc.project.metrics[keyPath: key]) },
+                set: { v in doc.mutate("Metrics", undoManager: undoManager) { $0.metrics[keyPath: key] = Int(v.rounded()) } }
+            ), in: range, step: 1)
+            Text("\(doc.project.metrics[keyPath: key])").monospacedDigit().frame(width: 26, alignment: .trailing)
         }
+    }
+
+    /// 1 pixel at the editor's current pixel-grid ppem, in grid units — the slider's step when
+    /// "snap to pixel grid" is on, so the bias always lands exactly on a pixel boundary.
+    private var biasStep: Double {
+        editor.snapBiasToPixel ? Double(doc.project.gridDivisions) / editor.pixPpem : 0.05
+    }
+    private var verticalBiasBinding: Binding<Double> {
+        Binding(
+            get: { doc.project.verticalBias },
+            set: { v in doc.mutate("Vertical Bias", undoManager: undoManager) { $0.verticalBias = v } }
+        )
     }
 }
 

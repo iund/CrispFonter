@@ -40,9 +40,18 @@ extension GlyphCanvasView {
 
     struct SegmentHit { var pathID: UUID; var index: Int; var t: Double; var isLine: Bool }
 
-    /// Nearest point on any segment, for inserting a node in Hint mode.
+    /// Nearest point on any segment, for inserting a node (skeleton double-click, hint-mode click).
+    /// Straight segments use an exact point-to-line projection rather than sampling — a fixed
+    /// sample count can space samples farther apart than the hit radius on a long line, making a
+    /// click in the middle of it miss entirely.
     func hitSegment(_ px: CGPoint) -> SegmentHit? {
         var best: (hit: SegmentHit, dist: CGFloat)?
+        func consider(_ pathID: UUID, _ index: Int, _ t: Double, _ isLine: Bool, _ p: GridPoint) {
+            let d = dist(toPx(p), px)
+            if d < hitRadius, best == nil || d < best!.dist {
+                best = (SegmentHit(pathID: pathID, index: index, t: t, isLine: isLine), d)
+            }
+        }
         for path in glyph.paths {
             let n = path.nodes
             let count = path.closed ? n.count : n.count - 1
@@ -50,13 +59,18 @@ extension GlyphCanvasView {
             for i in 0..<count {
                 let a = n[i], b = n[(i + 1) % n.count]
                 let isLine = a.cOut == nil && b.cIn == nil
-                let c1 = a.cOut ?? a.p, c2 = b.cIn ?? b.p
-                for s in 1..<32 {
-                    let t = Double(s) / 32
-                    let p = isLine ? GridPoint(a.p.x + (b.p.x - a.p.x) * t, a.p.y + (b.p.y - a.p.y) * t) : SkeletonGeometry.bezier(a.p, c1, c2, b.p, t)
-                    let d = dist(toPx(p), px)
-                    if d < hitRadius, best == nil || d < best!.dist {
-                        best = (SegmentHit(pathID: path.id, index: i, t: t, isLine: isLine), d)
+                if isLine {
+                    let pa = toPx(a.p), pb = toPx(b.p)
+                    let dx = pb.x - pa.x, dy = pb.y - pa.y
+                    let lenSq = dx * dx + dy * dy
+                    guard lenSq > 1e-6 else { continue }
+                    let t = min(max(((px.x - pa.x) * dx + (px.y - pa.y) * dy) / lenSq, 0.02), 0.98)
+                    consider(path.id, i, Double(t), true, GridPoint(a.p.x + (b.p.x - a.p.x) * Double(t), a.p.y + (b.p.y - a.p.y) * Double(t)))
+                } else {
+                    let c1 = a.cOut ?? a.p, c2 = b.cIn ?? b.p
+                    for s in 1..<64 {
+                        let t = Double(s) / 64
+                        consider(path.id, i, t, false, SkeletonGeometry.bezier(a.p, c1, c2, b.p, t))
                     }
                 }
             }

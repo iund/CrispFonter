@@ -54,9 +54,12 @@ enum GridFitting {
     /// Scale the outline to pixels and grid-fit it per the renderer model's hinting flags.
     static func fitOutline(glyph: Glyph, project: FontProject, ppem: Double, hintX: Bool, hintY: Bool) -> Fit {
         let s = ppem / Double(project.gridDivisions)
-        let d = Hinting.derivedHints(glyph, weight: project.defaultWeight)
+        let bias = project.verticalBias
+        var d = Hinting.derivedHints(glyph, weight: project.defaultWeight)
+        d.h = d.h.map { Hinting.Stem(lo: $0.lo + bias, hi: $0.hi + bias, mode: $0.mode) }
+        d.py = d.py.map { Hinting.PointAnchor(at: $0.at + bias, mode: $0.mode) }
         let outline = SkeletonGeometry.outline(of: glyph, weight: project.defaultWeight)
-        let contours: [[GridPoint]] = outline.contours.map { c in c.allPoints.map { GridPoint($0.x * s, $0.y * s) } }
+        let contours: [[GridPoint]] = outline.contours.map { c in c.allPoints.map { GridPoint($0.x * s, ($0.y + bias) * s) } }
 
         var fx: (Double) -> Double = { $0 }
         var fy: (Double) -> Double = { $0 }

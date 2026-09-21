@@ -14,13 +14,18 @@ struct GlyphBitmap {
     var advance: Double
 }
 
+/// How a bitmap's antialiasing is decided: `auto` reproduces a real gasp table's ppem-dependent
+/// mono/grey switch (used for the free-text size/renderer preview); the other three force one
+/// specific FreeType render mode regardless of size, for the renderer strip's fixed rows.
+enum AAMode: Hashable { case auto, mono, greyscale, subpixel }
+
 enum Rasterizer {
     /// Vertical supersamples per pixel; horizontal supersamples per *subpixel* (so 3*SS per pixel).
     static let SS = 4
     /// FreeType's default LCD filter taps.
     static let FIR: [Float] = [8, 77, 86, 77, 8].map { $0 / 256 }
 
-    static func rasterize(glyph: Glyph, project: FontProject, ppem: Double, renderer: RendererModel, lcdOn: Bool, gasp: Double) -> GlyphBitmap {
+    static func rasterize(glyph: Glyph, project: FontProject, ppem: Double, renderer: RendererModel, aa: AAMode, gasp: Double) -> GlyphBitmap {
         let s = ppem / Double(project.gridDivisions)
         let m = project.metrics
         let fit = GridFitting.fitOutline(glyph: glyph, project: project, ppem: ppem, hintX: renderer.hintsX, hintY: renderer.hintsY)
@@ -74,8 +79,21 @@ enum Rasterizer {
             }
         }
 
-        let useLCD = lcdOn && renderer.supportsLCD
-        let mono = !lcdOn && renderer.supportsMono && ppem < gasp
+        let useLCD: Bool, mono: Bool
+        switch aa {
+        case .auto:
+            useLCD = false
+            mono = renderer.supportsMono && ppem < gasp
+        case .mono:
+            useLCD = false
+            mono = true
+        case .greyscale:
+            useLCD = false
+            mono = false
+        case .subpixel:
+            useLCD = renderer.supportsLCD
+            mono = false
+        }
         var sub = [Float](repeating: 0, count: W3 * h)
         var cov = [Float](repeating: 0, count: w * h)
         for y in 0..<h {

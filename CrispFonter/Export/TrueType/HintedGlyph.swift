@@ -11,6 +11,7 @@ enum HintedGlyphBuilder {
     static func build(glyph: Glyph, project: FontProject, cvt: CVTTable) -> HintedGlyph {
         let (outline, tags) = SkeletonGeometry.outlineWithTags(of: glyph, weight: project.defaultWeight)
         let upc = project.unitsPerCell
+        let bias = project.verticalBias
 
         var contours: [[(Int, Int)]] = []
         var pointForNode: NodePointIndex = [:]
@@ -18,7 +19,7 @@ enum HintedGlyphBuilder {
         for (ci, contour) in outline.contours.enumerated() {
             var pts: [(Int, Int)] = []
             for (pi, point) in contour.allPoints.enumerated() {
-                pts.append((Int((point.x * upc).rounded()), Int((point.y * upc).rounded())))
+                pts.append((Int((point.x * upc).rounded()), Int(((point.y + bias) * upc).rounded())))
                 if let tag = tags[ci][pi] {
                     var entry = pointForNode[tag.nodeID] ?? (nil, nil)
                     if tag.side == .left { entry.left = globalIndex } else { entry.right = globalIndex }

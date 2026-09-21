@@ -36,8 +36,10 @@ final class ProjectDocument: ReferenceFileDocument, ObservableObject {
 
     /// Apply an undoable change. `actionName` shows up in the Edit menu.
     func mutate(_ actionName: String? = nil, undoManager: UndoManager?, _ body: (inout FontProject) -> Void) {
+        CrashLogger.breadcrumb("mutate start: \(actionName ?? "unnamed")")
         let before = project
         body(&project)
+        CrashLogger.breadcrumb("mutate body done: \(actionName ?? "unnamed")")
         guard project != before else { return }
         revision &+= 1
         undoManager?.registerUndo(withTarget: self) { doc in
@@ -48,6 +50,7 @@ final class ProjectDocument: ReferenceFileDocument, ObservableObject {
 
     /// Convenience for editing one glyph.
     func mutateGlyph(_ scalar: UInt32, _ actionName: String? = nil, undoManager: UndoManager?, _ body: (inout Glyph) -> Void) {
+        CrashLogger.breadcrumb("mutateGlyph U+\(String(format: "%04X", scalar)): \(actionName ?? "unnamed")")
         mutate(actionName, undoManager: undoManager) { p in
             var g = p.glyph(for: scalar)
             body(&g)

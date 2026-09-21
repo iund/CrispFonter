@@ -158,18 +158,19 @@ struct FontProject: Codable, Equatable {
     var metrics = Metrics()
     /// Default stroke thickness (whole stroke, both sides) in grid units.
     var defaultWeight: Double = 1.5
+    /// Global vertical nudge applied to every glyph's geometry (grid units), independent of the
+    /// metrics zones — lets the whole font be realigned without touching any glyph's own points.
+    var verticalBias: Double = 0
     var glyphs: [UInt32: Glyph] = [:]
     var referenceFontName: String = "Menlo"
     var previewText: String = FontProject.samplePreviewText
     /// Text preview size in points, 6–18 in 0.5 steps.
     var previewSize: Double = 12
     var previewRenderer: RendererModel = .freetype
-    /// Show subpixel (RGB stripe) rendering in the strip and preview.
-    var previewLCD: Bool = true
     /// Pixel-grid overlay size in the editor, points.
     var pixelGridSize: Double = 11
     /// Sizes shown in the renderer strip.
-    var previewSizes: [Double] = [9, 11, 13, 16]
+    var previewSizes: [Double] = [8, 9, 10, 11, 12, 13, 14]
     var export = ExportOptions()
 
     /// Font units per grid cell.
