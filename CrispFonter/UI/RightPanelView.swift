@@ -13,9 +13,7 @@ struct RightPanelView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                Text("RENDERERS · SAME OUTLINE, SAME HINTS").font(.caption2).foregroundStyle(.tertiary)
                 RendererStripView(doc: doc, glyph: glyph, revision: doc.revision, cache: cache, dark: dark)
-                ActualSizeRow(doc: doc, glyph: glyph, revision: doc.revision, cache: cache, dark: dark)
             }
             .padding(12)
             Divider()
@@ -65,16 +63,6 @@ enum PreviewMethod: CaseIterable, Identifiable {
         case .freetypeSubpixelSignal: "Subpixel signal"
         }
     }
-    var subtitle: String {
-        switch self {
-        case .freetypeMono: "1-bit, no AA · full hinting"
-        case .freetypeGrey: "greyscale AA · full hinting"
-        case .freetypeSubpixelColor: "LCD/ClearType-style AA · full hinting"
-        case .macos: "unhinted — CoreText disregards gridfitting entirely"
-        case .chrome: "Skia/DirectWrite, greyscale AA — subpixel AA has been off by default since ~2021"
-        case .freetypeSubpixelSignal: "raw LCD-filtered signal, 3:1, before RGB stripe mapping"
-        }
-    }
 }
 
 private struct RendererStripView: View {
@@ -98,23 +86,19 @@ private struct RendererStripView: View {
             }
             ForEach(PreviewMethod.allCases) { method in
                 HStack(spacing: 8) {
-                    rowLabel(Text(method.label).font(.caption), method.subtitle)
+                    rowLabel(method.label)
                     ForEach(previewSizes, id: \.self) { s in cell(method: method, ppem: s).frame(maxWidth: .infinity) }
                 }
             }
             HStack(spacing: 8) {
-                rowLabel(Text("Reference").font(.caption), "system font, real OS rendering")
+                rowLabel("Reference")
                 ForEach(previewSizes, id: \.self) { s in referenceCell(ppem: s).frame(maxWidth: .infinity) }
             }
         }
     }
 
-    private func rowLabel(_ title: Text, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            title
-            Text(subtitle).font(.caption2).foregroundStyle(.tertiary)
-        }
-        .frame(width: labelWidth, alignment: .leading)
+    private func rowLabel(_ title: String) -> some View {
+        Text(title).font(.caption).frame(width: labelWidth, alignment: .leading)
     }
 
     @ViewBuilder
@@ -162,36 +146,13 @@ private struct RendererStripView: View {
     }
 }
 
-private struct ActualSizeRow: View {
-    @ObservedObject var doc: ProjectDocument
-    let glyph: Glyph
-    let revision: Int
-    let cache: GlyphBitmapCache
-    let dark: Bool
-
-    /// The subpixel-signal method has no meaningful "actual size" (its whole point is the 3x
-    /// magnified breakdown), so it's left out of this row.
-    private var methods: [PreviewMethod] { PreviewMethod.allCases.filter { $0.colorDisplay } }
-
-    var body: some View {
-        let theme = BitmapImages.Theme.of(dark)
-        HStack(alignment: .lastTextBaseline, spacing: 14) {
-            Text("Actual size:").font(.caption).foregroundStyle(.secondary)
-            ForEach(methods) { method in
-                HStack(spacing: 2) {
-                    ForEach(previewSizes, id: \.self) { s in
-                        let bmp = cache.bitmap(glyph: glyph, project: doc.project, revision: revision, ppem: s, renderer: method.engine, aa: method.aa)
-                        pixelImage(BitmapImages.nsImage(BitmapImages.actualSize(bmp, theme: theme)), width: Double(bmp.w), height: Double(bmp.h))
-                    }
-                }
-            }
-        }
-        .padding(8)
-        .background(theme.swiftUIColor)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
-        .cornerRadius(8)
-    }
-}
+/// Every fixed-pitch font family installed, for the reference-font picker.
+private let monospacedFamilies: [String] = {
+    NSFontManager.shared.availableFontFamilies.filter { name in
+        guard let font = NSFont(name: name, size: 12) else { return false }
+        return font.isFixedPitch
+    }.sorted()
+}()
 
 private struct TextPreviewView: View {
     @ObservedObject var doc: ProjectDocument
@@ -202,6 +163,15 @@ private struct TextPreviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                Picker("", selection: Binding(
+                    get: { doc.project.referenceFontName },
+                    set: { v in doc.mutate(undoManager: undoManager) { $0.referenceFontName = v } }
+                )) {
+                    ForEach(["Menlo", "SF Mono", "Monaco", "Consolas", "Courier New"], id: \.self) { Text($0).tag($0) }
+                    ForEach(monospacedFamilies, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden()
+                .frame(width: 140)
                 Text("Size")
                 Slider(value: Binding(get: { doc.project.previewSize }, set: { doc.project.previewSize = $0 }), in: 6...18, step: 0.5)
                     .frame(width: 100)

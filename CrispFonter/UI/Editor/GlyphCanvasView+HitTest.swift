@@ -31,13 +31,6 @@ extension GlyphCanvasView {
         return nil
     }
 
-    func hitCap(_ px: CGPoint) -> CapHandle? {
-        for path in glyph.paths {
-            for ch in capHandles(path) where dist(toPx(ch.pos), px) < hitRadius { return ch }
-        }
-        return nil
-    }
-
     struct SegmentHit { var pathID: UUID; var index: Int; var t: Double; var isLine: Bool }
 
     /// Nearest point on any segment, for inserting a node (skeleton double-click, hint-mode click).
@@ -78,5 +71,5 @@ extension GlyphCanvasView {
         return best?.hit
     }
 
-    private func dist(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
+    func dist(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
 }

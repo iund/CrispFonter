@@ -1,12 +1,5 @@
 import SwiftUI
 
-private let monospacedFamilies: [String] = {
-    NSFontManager.shared.availableFontFamilies.filter { name in
-        guard let font = NSFont(name: name, size: 12) else { return false }
-        return font.isFixedPitch
-    }.sorted()
-}()
-
 struct SidebarView: View {
     @ObservedObject var doc: ProjectDocument
     @ObservedObject var editor: EditorState
@@ -45,17 +38,6 @@ struct SidebarView: View {
                         .font(.caption2).foregroundStyle(.tertiary)
                 }
 
-                Section("Reference font") {
-                    Picker("", selection: Binding(
-                        get: { doc.project.referenceFontName },
-                        set: { v in doc.mutate(undoManager: undoManager) { $0.referenceFontName = v } }
-                    )) {
-                        ForEach(["Menlo", "SF Mono", "Monaco", "Consolas", "Courier New"], id: \.self) { Text($0).tag($0) }
-                        ForEach(monospacedFamilies, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden()
-                }
-
                 Section("Rendering model") {
                     HStack {
                         Text("1-bit below")
@@ -67,6 +49,24 @@ struct SidebarView: View {
                         }
                     }
                     Text("Greyscale only; FreeType/GDI switch to 1-bit under this size.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Section("Export") {
+                    Toggle("Include hints", isOn: Binding(
+                        get: { doc.project.export.includeHints },
+                        set: { v in doc.mutate(undoManager: undoManager) { $0.export.includeHints = v } }
+                    ))
+                    HStack {
+                        Text("Hint cut-off")
+                        Stepper(value: Binding(
+                            get: { doc.project.export.hintCutoffPPEM },
+                            set: { v in doc.mutate(undoManager: undoManager) { $0.export.hintCutoffPPEM = v } }
+                        ), in: 1...400) {
+                            Text("\(doc.project.export.hintCutoffPPEM) ppem")
+                        }
+                    }
+                    Text("Above this size the exported font's prep program switches instructions off.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

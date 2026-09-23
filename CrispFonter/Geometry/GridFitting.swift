@@ -40,6 +40,14 @@ enum GridFitting {
             var loP: Double, hiP: Double
             if st.mode == .positive { hiP = Hinting.snapPx(hi, .positive); loP = hiP - w }
             else if st.mode == .negative { loP = Hinting.snapPx(lo, .negative); hiP = loP + w }
+            else if st.mode == .outward {
+                // Both edges round away from the stem's own center — floor the low edge, ceil the
+                // high one — so the stem only ever grows, never rounds itself down to nothing at
+                // small sizes. Unlike the other modes, the width isn't pinned to `w`: outward can
+                // (and often will) end up a pixel wider than plain nearest-rounding would.
+                loP = Hinting.snapPx(lo, .negative)
+                hiP = Hinting.snapPx(hi, .positive)
+            }
             else if let zl { loP = zl.dst; hiP = loP + w }
             else if let zh { hiP = zh.dst; loP = hiP - w }
             else { loP = lo.rounded(); hiP = loP + w }

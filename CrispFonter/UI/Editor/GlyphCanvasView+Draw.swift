@@ -1,11 +1,11 @@
 import AppKit
+import SwiftUI
 
 enum EditorTheme {
     static let dot = NSColor.tertiaryLabelColor
     static let guide = NSColor.systemBlue.withAlphaComponent(0.75)
     static let guideStrong = NSColor.systemBlue
     static let skeleton = NSColor.systemPurple
-    static let skeletonFill = NSColor.systemPurple.withAlphaComponent(0.18)
     static let handle = NSColor.systemTeal
     static let thick = NSColor.systemOrange
     static let thickBg = NSColor.systemOrange.withAlphaComponent(0.14)
@@ -19,14 +19,58 @@ extension GlyphCanvasView {
         guard let ctx = NSGraphicsContext.current?.cgContext, doc != nil else { return }
         NSColor.controlBackgroundColor.setFill(); dirtyRect.fill()
         updateTransform()
+        if editor.showReferenceGlyph || ctrlHeld { drawReferenceGlyph(ctx) }
         drawDots(ctx)
         if editor.mode == .metrics { drawLineHeightFill(ctx) }
         if editor.showPix { drawPixelGrid(ctx) }
         drawGuides(ctx)
         if editor.mode == .metrics { drawMetricHandles(ctx) }
         if editor.mode == .hint { drawDerivedStems(ctx) }
-        if editor.showFill { drawFill(ctx) }
+        drawFill(ctx)
         if editor.showSkel { drawSkeletonAndModeOverlays(ctx) }
+        if editor.mode == .metrics && cmdHeld { drawPanHint(ctx) }
+    }
+
+    /// ⌃ held (momentarily) or the persistent toggle: the same character from the reference font,
+    /// at the same position/scale as the glyph itself, behind everything else except the
+    /// background — a quick "how does this compare to a real font" sanity check, no handles.
+    /// `controlBackgroundColor` (already painted at the top of `draw`) is already dark grey in
+    /// dark mode and light grey in light mode, so no separate tint is needed either way — just
+    /// draw the glyph in whichever color reads against that: black on dark, white on light.
+    private func drawReferenceGlyph(_ ctx: CGContext) {
+        guard editor.currentScalar != 0x20, editor.currentScalar != Glyph.notdefScalar,
+              let scalar = Unicode.Scalar(editor.currentScalar) else { return }
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let fontSize = cell * CGFloat(doc.project.gridDivisions)
+        guard fontSize > 1 else { return }
+        let font = NSFont(name: doc.project.referenceFontName, size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: dark ? NSColor.black : NSColor.white]
+        let baseline = toPx(GridPoint(0, 0))
+        String(Character(scalar)).draw(at: NSPoint(x: baseline.x, y: baseline.y - font.ascender), withAttributes: attrs)
+    }
+
+    /// ⌘ held in Metrics mode: four arrows at the edges of the canvas indicating the canvas can be
+    /// panned with the arrow keys right now, independent of Fn-hide. Each arrow sits near the edge
+    /// it points toward (not clustered at the center) so it reads as "pan this direction" at a glance.
+    private func drawPanHint(_ ctx: CGContext) {
+        let margin: CGFloat = 36
+        ctx.setStrokeColor(NSColor.secondaryLabelColor.cgColor)
+        ctx.setLineWidth(2.5)
+        for (dx, dy) in [(0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)] {
+            let anchor = CGPoint(
+                x: dx > 0 ? bounds.maxX - margin : dx < 0 ? bounds.minX + margin : bounds.midX,
+                y: dy > 0 ? bounds.maxY - margin : dy < 0 ? bounds.minY + margin : bounds.midY
+            )
+            let inner = CGPoint(x: anchor.x + dx * 20, y: anchor.y + dy * 20)
+            let outer = CGPoint(x: anchor.x + dx * 40, y: anchor.y + dy * 40)
+            ctx.move(to: inner); ctx.addLine(to: outer); ctx.strokePath()
+            let perp = CGPoint(x: -dy, y: dx)
+            ctx.move(to: outer)
+            ctx.addLine(to: CGPoint(x: outer.x - dx * 10 + perp.x * 7, y: outer.y - dy * 10 + perp.y * 7))
+            ctx.move(to: outer)
+            ctx.addLine(to: CGPoint(x: outer.x - dx * 10 - perp.x * 7, y: outer.y - dy * 10 - perp.y * 7))
+            ctx.strokePath()
+        }
     }
 
     /// Metrics mode: shade the space outside this glyph's own line box translucent blue. A line's
@@ -147,8 +191,13 @@ extension GlyphCanvasView {
         ctx.setLineDash(phase: 0, lengths: [])
     }
 
+    /// The fill is always shown (there's no toggle for it anymore) — hiding the skeleton, whether
+    /// via its persistent toggle or momentarily by holding Fn (see `drawSkeletonAndModeOverlays`),
+    /// instead makes the fill itself read more clearly by going fully opaque, rather than leaving
+    /// an empty canvas with nothing to look at.
     private func drawFill(_ ctx: CGContext) {
-        ctx.setFillColor(EditorTheme.skeletonFill.cgColor)
+        let alpha = (editor.showSkel && !fnHeld) ? 0.5 : 1.0
+        ctx.setFillColor(NSColor(editor.fillColor).withAlphaComponent(alpha).cgColor)
         let path = CGMutablePath()
         for c in SkeletonGeometry.outline(of: glyph, weight: weight).contours {
             let pts = c.allPoints

@@ -9,8 +9,7 @@ extension GlyphCanvasView {
         CrashLogger.breadcrumb("mouseDown mode=\(editor.mode) clicks=\(event.clickCount) glyph=U+\(String(format: "%04X", editor.currentScalar)) at=\(px)")
         switch editor.mode {
         case .metrics: metricsDown(event, px)
-        case .skeleton: skeletonDown(event, px)
-        case .thicken: thickenDown(event, px)
+        case .combo: comboDown(event, px)
         case .hint: hintDown(event, px)
         }
     }
@@ -26,14 +25,13 @@ extension GlyphCanvasView {
         case .pen(let pathID, let nodeID, let start): dragPen(pathID, nodeID, start, gp, alt: event.modifierFlags.contains(.option))
         case .moveNode(let pathID, let nodeID): dragMoveNode(pathID, nodeID, gp)
         case .handle(let pathID, let nodeID, let key, let alt): dragHandle(pathID, nodeID, key, gp, alt: alt)
-        case .thickness(let pathID, let nodeID, let side, let dir, let both): dragThickness(pathID, nodeID, side, dir, both, raw)
-        case .angle(let pathID, let nodeID, let dir0): dragAngle(pathID, nodeID, dir0, raw)
-        case .cap(let pathID, let nodeID, let dir0): dragCap(pathID, nodeID, dir0, raw)
+        case .fillHandle(let pathID, let nodeID, let side): dragFillHandle(pathID, nodeID, side, raw)
+        case .anchorNode(let pathID, let nodeID): dragMoveNode(pathID, nodeID, gp)
         case .hint(let pathID, let nodeID, let index, let start, let was, let inserted, _):
             dragHint(pathID, nodeID, index, start, was, inserted, px)
         case .metric(let guide):
             dragMetric(guide, toGrid(px, biased: false))
-        case .marquee:
+        case .marquee, .rightClick:
             marqueeCurrent = px
         }
         needsDisplay = true
@@ -42,14 +40,28 @@ extension GlyphCanvasView {
     override func mouseUp(with event: NSEvent) {
         CrashLogger.breadcrumb("mouseUp drag=\(actionName(for: drag)) hadWorking=\(working != nil)")
         defer { drag = nil }
-        if case .marquee(let start) = drag {
-            finishMarquee(start: start, end: evPos(event))
+        if case .marquee(let start, let additive) = drag {
+            finishMarquee(start: start, end: evPos(event), additive: additive)
+            marqueeCurrent = nil
+            needsDisplay = true
+            return
+        }
+        if case .rightClick(let start) = drag {
+            let end = evPos(event)
+            if hypot(end.x - start.x, end.y - start.y) > 4 {
+                finishMarquee(start: start, end: end, additive: false)
+            } else {
+                finishRightClickTap(at: end)
+            }
             marqueeCurrent = nil
             needsDisplay = true
             return
         }
         if case .hint(let pathID, let nodeID, let index, _, let was, let inserted, let moved) = drag, !moved, !inserted {
             finishHintClick(pathID, nodeID, index, was)
+        }
+        if case .anchorNode(let pathID, let nodeID) = drag {
+            finishAnchorDrag(pathID, nodeID, at: evPos(event))
         }
         if working != nil { commit(actionName(for: drag)) } else { needsDisplay = true }
     }
@@ -61,24 +73,49 @@ extension GlyphCanvasView {
         if drawingPathID != nil { needsDisplay = true }
     }
 
+    // Real right-button events just feed the same state machine as the ⌃-click substitute —
+    // `drag` doesn't care which physical button started it.
     override func rightMouseDown(with event: NSEvent) {
-        guard editor.mode == .hint, let hit = hitNode(evPos(event)) else { return }
-        showHintMenu(for: hit, at: event)
+        window?.makeFirstResponder(self)
+        guard editor.mode == .combo, drawingPathID == nil else { return }
+        drag = .rightClick(start: evPos(event))
     }
+    override func rightMouseDragged(with event: NSEvent) { mouseDragged(with: event) }
+    override func rightMouseUp(with event: NSEvent) { mouseUp(with: event) }
 
     // MARK: - Keyboard
 
     override func keyDown(with event: NSEvent) {
         if let name = Self.arrowName(event.keyCode) { heldArrowKeys.insert(name) }
-        if editor.mode == .skeleton, event.modifierFlags.contains(.command),
-           event.charactersIgnoringModifiers?.lowercased() == "a" {
-            selectAllNodes()
+        // ⌃Space toggles the reference-glyph overlay's persistent state — intercepted here, ahead
+        // of every mode's own plain-Space handler, since none of them check for ⌃.
+        if event.keyCode == KeyCode.space, event.modifierFlags.contains(.control) {
+            editor.showReferenceGlyph.toggle()
+            needsDisplay = true
             return
+        }
+        if editor.mode == .combo, event.modifierFlags.contains(.command) {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "a": selectAllNodes(); return
+            case "c": copySelection(); return
+            case "x": cutSelection(); return
+            case "v": pasteSelection(); return
+            default: break
+            }
         }
         if tryGlobalCharacterShortcut(event) { return }
 
         if event.keyCode == KeyCode.tab {
             let backward = event.modifierFlags.contains(.shift)
+            // ⌥Tab/⇧⌥Tab cycles editor modes, leaving node/metric selection untouched. Handled
+            // here rather than as a window-wide SwiftUI `.keyboardShortcut(.tab, ...)` button —
+            // Tab is special-cased deep in AppKit's focus-traversal machinery and a hidden
+            // button's key equivalent doesn't reliably intercept it before it reaches the
+            // canvas's own keyDown, unlike every other shortcut in this app.
+            if event.modifierFlags.contains(.option) {
+                editor.cycleMode(backward: backward)
+                return
+            }
             if editor.mode == .metrics { cycleMetricSelection(backward: backward) } else { cycleSelection(backward: backward) }
             return
         }
@@ -86,8 +123,7 @@ extension GlyphCanvasView {
         let flags = event.modifierFlags
         switch editor.mode {
         case .metrics: metricsKeyDown(event, flags)
-        case .skeleton: skeletonKeyDown(event, flags)
-        case .thicken: thickenKeyDown(event, flags)
+        case .combo: comboKeyDown(event, flags)
         case .hint: hintKeyDown(event, flags)
         }
     }
@@ -155,6 +191,13 @@ extension GlyphCanvasView {
     static func isRightOption(_ flags: NSEvent.ModifierFlags) -> Bool {
         flags.contains(.option) && (flags.rawValue & 0x40 != 0)
     }
+    /// Same left/right-distinguishing trick, for ⌘: left = inner thickness, right = outer.
+    static func isLeftCommand(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.contains(.command) && (flags.rawValue & 0x08 != 0)
+    }
+    static func isRightCommand(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.contains(.command) && (flags.rawValue & 0x10 != 0)
+    }
 
     func actionName(for drag: Drag?) -> String {
         guard let drag else { return "Edit" }
@@ -162,12 +205,12 @@ extension GlyphCanvasView {
         case .pen: return "Draw"
         case .moveNode: return "Move Node"
         case .handle: return "Adjust Curve"
-        case .thickness: return "Thickness"
-        case .angle: return "Rotate Terminal"
-        case .cap: return "Cap"
+        case .fillHandle: return "Adjust Fill Handle"
+        case .anchorNode: return "Anchor Node"
         case .hint: return "Hint"
         case .metric: return "Adjust Metric"
         case .marquee: return "Select"
+        case .rightClick: return "Select"
         }
     }
 

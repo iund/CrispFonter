@@ -31,9 +31,33 @@ final class GlyphCanvasView: NSView {
     /// Uncommitted edits for the in-progress gesture; committed to `doc` on mouseUp.
     var working: Glyph?
     /// Tracks each shift key's own down state (as opposed to the normalized, side-agnostic
-    /// `.shift` flag), so pressing either one toggles its own thing exactly once per press.
+    /// `.shift` flag), so a press is detected exactly once as a rising edge.
     private var leftShiftActive = false
     private var rightShiftActive = false
+    /// Timestamp of each side's last rising edge, to detect a double-press (two presses within
+    /// `doublePressWindow`) rather than acting on every single tap.
+    private var leftShiftLastPress: TimeInterval = 0
+    private var rightShiftLastPress: TimeInterval = 0
+    private static let doublePressWindow: TimeInterval = 0.4
+    /// Whether caps lock was down on the previous flagsChanged, so switching it on/off is an edge,
+    /// not a level — it's a physical toggle key, so this fires once per flip either direction.
+    private var capsLockActive = false
+
+    // Live modifier state, for the momentary hold effects (skeleton hidden, handle highlights,
+    // pan hint) — these are levels, not edges, so just mirror `flagsChanged` directly.
+    var fnHeld = false
+    var cmdHeld = false
+    var shiftHeld = false
+    var leftOptionHeld = false
+    var rightOptionHeld = false
+    /// Either ⌥ — used by Hint mode's round-outward preview, which (unlike cIn/cOut) has no
+    /// left/right distinction.
+    var optionHeld = false
+    var leftCommandHeld = false
+    var rightCommandHeld = false
+    /// Momentarily shows the reference-font glyph while held (see `EditorState.showReferenceGlyph`
+    /// for the persistent toggle).
+    var ctrlHeld = false
 
     var cell: CGFloat = 30
     var originX: CGFloat = 0
@@ -45,7 +69,11 @@ final class GlyphCanvasView: NSView {
 
     // MARK: - Glyph access
 
-    var glyph: Glyph { working ?? doc.project.glyph(for: editor.currentScalar) }
+    /// Anchor-resolved (see `Glyph.resolvingAnchors`) — every display/hit-testing use of a node's
+    /// `p` should see the live thickness-edge position an anchored node tracks, not its last
+    /// literally-stored coordinate. `mutateWorking`/`commit` still read and write the raw,
+    /// unresolved stored data, so anchors themselves persist rather than getting baked in.
+    var glyph: Glyph { (working ?? doc.project.glyph(for: editor.currentScalar)).resolvingAnchors(weight: weight) }
     var weight: Double { doc.project.defaultWeight }
 
     func mutateWorking(_ body: (inout Glyph) -> Void) {
@@ -88,6 +116,11 @@ final class GlyphCanvasView: NSView {
             editor.zoomCell = max(10, min((h - 20) / max(spanY, 1), (w - 20) / max(spanX, 1)))
         }
         cell = editor.zoomCell!
+        // While actively dragging a metric guide, `originX`/`originY` depend on the very value
+        // being dragged (ascender/descender/advance) — recomputing every frame made the whole
+        // canvas visibly re-center as you drag. Freeze the origin for the drag's duration; it
+        // re-centers once, cleanly, the moment the drag ends (the next `updateTransform` after).
+        if case .metric = drag { return }
         originX = ((w - CGFloat(doc.project.advance(of: glyph)) * cell) / 2).rounded() + editor.panOffset.x
         originY = (h / 2 + CGFloat(m.ascender + m.descender) / 2 * cell).rounded() + editor.panOffset.y
     }
@@ -126,21 +159,58 @@ final class GlyphCanvasView: NSView {
         return GridPoint(Double((px.x - originX) / cell), y)
     }
     func snap(_ p: GridPoint, fine: Bool) -> GridPoint {
-        let q: Double = fine || editor.halfSnap ? 2 : 1
+        let q: Double = fine ? Double(max(editor.snapDenominator, 2)) : Double(editor.snapDenominator)
         return GridPoint((p.x * q).rounded() / q, (p.y * q).rounded() / q)
     }
 
-    /// Left ⇧ alone toggles the pixel-grid preview; right ⇧ alone toggles half-grid snap. Bare
-    /// modifier taps don't generate `keyDown`, so these are caught via raw modifier-flag
-    /// transitions instead — same left/right-distinguishing trick as `isLeftOption`/`isRightOption`.
+    /// Double-pressing left ⇧ alone toggles the pixel-grid preview; double-pressing right ⇧ alone
+    /// toggles between whole-grid and half-grid snap. Caps lock switches modes: on → Hint, off → Combo. Bare modifier taps
+    /// don't generate `keyDown`, so these are caught via raw modifier-flag transitions instead —
+    /// same left/right-distinguishing trick as `isLeftOption`/`isRightOption`.
     override func flagsChanged(with event: NSEvent) {
         let flags = event.modifierFlags
         let leftNow = flags.contains(.shift) && (flags.rawValue & 0x2 != 0)
         let rightNow = flags.contains(.shift) && (flags.rawValue & 0x4 != 0)
-        if leftNow, !leftShiftActive { editor.showPix.toggle() }
-        if rightNow, !rightShiftActive { editor.halfSnap.toggle() }
+        let now = event.timestamp
+        if leftNow, !leftShiftActive {
+            if now - leftShiftLastPress < Self.doublePressWindow { editor.showPix.toggle() }
+            leftShiftLastPress = now
+        }
+        if rightNow, !rightShiftActive {
+            if now - rightShiftLastPress < Self.doublePressWindow { editor.snapStepIndex = editor.snapStepIndex == 5 ? 4 : 5 }
+            rightShiftLastPress = now
+        }
         leftShiftActive = leftNow
         rightShiftActive = rightNow
+
+        let capsNow = flags.contains(.capsLock)
+        if capsNow != capsLockActive { editor.capsLockChanged(on: capsNow) }
+        capsLockActive = capsNow
+
+        fnHeld = flags.contains(.function)
+        cmdHeld = flags.contains(.command)
+        shiftHeld = flags.contains(.shift)
+        leftOptionHeld = Self.isLeftOption(flags)
+        rightOptionHeld = Self.isRightOption(flags)
+        optionHeld = flags.contains(.option)
+        leftCommandHeld = Self.isLeftCommand(flags)
+        rightCommandHeld = Self.isRightCommand(flags)
+        ctrlHeld = flags.contains(.control)
+        needsDisplay = true
+
         super.flagsChanged(with: event)
+    }
+
+    /// Two-finger trackpad pan — moves the canvas the same direction the fingers move.
+    override func scrollWheel(with event: NSEvent) {
+        editor.panOffset.x += event.scrollingDeltaX
+        editor.panOffset.y += event.scrollingDeltaY
+        needsDisplay = true
+    }
+
+    /// Pinch-to-zoom — anchored at the glyph origin, same as ⌘−/⌘=, not the pinch center (a
+    /// cursor-anchored pinch would need the event's location threaded through `zoomBy`).
+    override func magnify(with event: NSEvent) {
+        zoomBy(1 + event.magnification)
     }
 }

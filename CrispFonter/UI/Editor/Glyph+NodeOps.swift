@@ -10,16 +10,51 @@ extension Glyph {
         return paths[pi].nodes[ni]
     }
 
+    /// Finds a node by id alone, searching every path — an anchor's target can be in any stroke
+    /// of the same glyph, not necessarily the anchored node's own path.
+    func findNode(_ nodeID: UUID) -> (path: SkeletonPath, index: Int)? {
+        for path in paths {
+            if let i = path.nodes.firstIndex(where: { $0.id == nodeID }) { return (path, i) }
+        }
+        return nil
+    }
+
+    /// Replaces every anchored node's position with its target's current thickness-edge position
+    /// at `weight` — anchors track that edge live rather than storing a fixed offset. Resolved in
+    /// a few passes (not recursively) so a short chain of anchors settles; a cycle just stops
+    /// changing after the pass limit rather than looping forever.
+    func resolvingAnchors(weight: Double) -> Glyph {
+        var g = self
+        for _ in 0..<4 {
+            var changed = false
+            for pi in g.paths.indices {
+                for ni in g.paths[pi].nodes.indices {
+                    guard let anchor = g.paths[pi].nodes[ni].anchor,
+                          let (targetPath, targetIndex) = g.findNode(anchor.targetNodeID) else { continue }
+                    let edge = SkeletonGeometry.thicknessEdge(of: targetPath.nodes[targetIndex], path: targetPath, index: targetIndex, side: anchor.side, weight: weight)
+                    if g.paths[pi].nodes[ni].p != edge {
+                        g.paths[pi].nodes[ni].p = edge
+                        changed = true
+                    }
+                }
+            }
+            if !changed { break }
+        }
+        return g
+    }
+
     mutating func withNode(_ pathID: UUID, _ nodeID: UUID, _ body: (inout Node) -> Void) {
         guard let pi = pathIndex(pathID), let ni = nodeIndex(pathID, nodeID) else { return }
         body(&paths[pi].nodes[ni])
     }
 
+    /// Deleting a node down to one remaining leaves that node as a dot (see
+    /// `SkeletonGeometry.outlineWithTags`) rather than discarding it — only an empty path is removed.
     mutating func deleteNode(_ pathID: UUID, _ nodeID: UUID) {
         guard let pi = pathIndex(pathID) else { return }
         paths[pi].nodes.removeAll { $0.id == nodeID }
         hints[nodeID] = nil
-        if paths[pi].nodes.count < 2 { paths.remove(at: pi) }
+        if paths[pi].nodes.isEmpty { paths.remove(at: pi) }
     }
 
     /// Split segment `index` of the path at parameter `t` without changing the shape
@@ -81,6 +116,11 @@ extension Glyph {
             if let pi2 = prevIndex { paths[pi].nodes[pi2].cOut = nil }
             if let ni2 = nextIndex { paths[pi].nodes[ni2].cIn = nil }
         }
+        // Either direction reshapes the segments touching this node, so any explicit fill handle
+        // here is reset back to automatic — it would otherwise keep following the *old* curve
+        // shape instead of the new one.
+        nd.outer = nil
+        nd.inner = nil
         paths[pi].nodes[ni] = nd
     }
 

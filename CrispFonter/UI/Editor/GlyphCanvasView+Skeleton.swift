@@ -52,9 +52,14 @@ extension GlyphCanvasView {
             needsDisplay = true
             return
         }
-        // ⇧-drag from empty space starts a marquee selection instead of a new stroke.
-        if event.modifierFlags.contains(.shift) {
-            drag = .marquee(start: px)
+        // Empty space: with something already selected, a plain click/drag deselects or re-picks
+        // via marquee instead of drawing — ⌘ always means select/marquee (additively), regardless
+        // of what's currently selected. With nothing selected, a plain click/drag starts a new
+        // stroke instead (a drag immediately pulls out curve handles, same as the pen tool always
+        // did) — the canvas is idle, so there's nothing to accidentally deselect by clicking.
+        let hasSelection = selection != nil || !multiSelection.isEmpty
+        if event.modifierFlags.contains(.command) || hasSelection {
+            drag = .marquee(start: px, additive: event.modifierFlags.contains(.command))
             return
         }
         startPath(at: gp)
@@ -80,17 +85,23 @@ extension GlyphCanvasView {
     }
 
     /// Finishes a marquee drag: every node whose on-screen position falls inside the rectangle
-    /// becomes the multi-selection (replacing whatever was selected before).
-    func finishMarquee(start: CGPoint, end: CGPoint) {
+    /// becomes the multi-selection — added to whatever was already selected if `additive` (⌘ was
+    /// held), replacing it otherwise. A plain click (too small to count as a drag) deselects
+    /// everything unless `additive`, in which case it's a no-op — there's nothing to add.
+    func finishMarquee(start: CGPoint, end: CGPoint, additive: Bool) {
         let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y),
                            width: abs(end.x - start.x), height: abs(end.y - start.y))
         guard rect.width > 2 || rect.height > 2 else {
-            selection = nil; multiSelection = []
+            if !additive { selection = nil; multiSelection = [] }
             return
         }
         var refs: Set<NodeRef> = []
         for path in glyph.paths {
             for nd in path.nodes where rect.contains(toPx(nd.p)) { refs.insert(NodeRef(pathID: path.id, nodeID: nd.id)) }
+        }
+        if additive {
+            refs.formUnion(multiSelection)
+            if let sel = selection { refs.insert(NodeRef(pathID: sel.pathID, nodeID: sel.nodeID)) }
         }
         multiSelection = refs.count > 1 ? refs : []
         selection = refs.first.map { ($0.pathID, $0.nodeID) }
@@ -104,6 +115,18 @@ extension GlyphCanvasView {
 
     func selectAllNodes() {
         let refs = Set(glyph.paths.flatMap { path in path.nodes.map { NodeRef(pathID: path.id, nodeID: $0.id) } })
+        selectNodes(refs)
+    }
+
+    /// Selects every node of one path — used once a stroke finishes drawing, so its whole shape is
+    /// immediately ready for a group edit (⌫ to delete it, arrows to nudge it, etc.) without having
+    /// to marquee it first.
+    private func selectAllNodes(inPath pathID: UUID) {
+        guard let path = glyph.paths.first(where: { $0.id == pathID }) else { return }
+        selectNodes(Set(path.nodes.map { NodeRef(pathID: pathID, nodeID: $0.id) }))
+    }
+
+    private func selectNodes(_ refs: Set<NodeRef>) {
         multiSelection = refs.count > 1 ? refs : []
         selection = refs.first.map { ($0.pathID, $0.nodeID) }
         needsDisplay = true
@@ -129,15 +152,15 @@ extension GlyphCanvasView {
         if drawingPathID != nil { finishDrawing(); return }
         switch editor.mode {
         case .metrics: break
-        case .skeleton: skeletonDoubleClick(px)
-        case .thicken: thickenDoubleClick(px)
+        case .combo: skeletonDoubleClick(px)
         case .hint: break
         }
     }
 
     /// Double-click a node to toggle corner ↔ smooth; double-click a segment to insert a node
-    /// there, splitting it without changing the shape.
-    private func skeletonDoubleClick(_ px: CGPoint) {
+    /// there, splitting it without changing the shape. (Thicken's own double-click-to-reset a
+    /// handle doesn't carry over into Combo mode — this is the only double-click behavior there.)
+    func skeletonDoubleClick(_ px: CGPoint) {
         if let hn = hitNode(px) {
             mutateWorking { g in g.toggleNodeKind(hn.pathID, hn.nodeID) }
             commit("Toggle Node Kind")
@@ -163,24 +186,32 @@ extension GlyphCanvasView {
         drag = .pen(pathID: newPathID, nodeID: newNodeID, start: gp)
     }
 
-    private func continuePath(_ pathID: UUID, _ px: CGPoint, _ gp: GridPoint) {
-        guard let pi = glyph.pathIndex(pathID), let last = glyph.paths[pi].nodes.last else { drawingPathID = nil; return }
+    /// `checkOnly` runs just the close/join hit-tests and skips placing a node — used by Space
+    /// (see `skeletonKeyDown`) to check whether the last node's *current* position (which arrow
+    /// keys may have nudged onto a target) already closes or joins the path, before falling back
+    /// to its normal fixed-step placement. Returns whether it closed, joined, finished, or placed
+    /// a node — i.e. whether the caller should treat this as handled.
+    @discardableResult
+    private func continuePath(_ pathID: UUID, _ px: CGPoint, _ gp: GridPoint, checkOnly: Bool = false) -> Bool {
+        guard let pi = glyph.pathIndex(pathID), let last = glyph.paths[pi].nodes.last else { drawingPathID = nil; return false }
         let nodes = glyph.paths[pi].nodes
         if let hn = hitNode(px), hn.nodeID == nodes[0].id, nodes.count > 2 {
             mutateWorking { g in g.paths[g.pathIndex(pathID)!].closed = true }
             finishDrawing()
-            return
+            return true
         }
         // Ending a new line on an existing line's endpoint joins them into one path, so extending
         // a stroke is just "start elsewhere, draw up to its end" rather than a separate step.
         if let hn = hitNode(px), hn.pathID != pathID, let isLast = glyph.endpointIsLast(hn.pathID, hn.nodeID) {
+            let targetPathID = hn.pathID
             mutateWorking { g in g.joinDrawingPath(pathID, intoEndpointOf: hn.pathID, isLastEndpoint: isLast) }
             drawingPathID = nil
-            selection = nil
             commit("Join Paths")
-            return
+            selectAllNodes(inPath: targetPathID)
+            return true
         }
-        if last.p.x == gp.x && last.p.y == gp.y { finishDrawing(); return }
+        guard !checkOnly else { return false }
+        if last.p.x == gp.x && last.p.y == gp.y { finishDrawing(); return true }
         var newID = UUID()
         mutateWorking { g in
             let nd = Node(gp)
@@ -188,16 +219,21 @@ extension GlyphCanvasView {
             g.paths[g.pathIndex(pathID)!].nodes.append(nd)
         }
         drag = .pen(pathID: pathID, nodeID: newID, start: gp)
+        return true
     }
 
+    /// A path left with just one node isn't discarded — it's kept and drawn as a dot (see
+    /// `SkeletonGeometry.outlineWithTags`), for punctuation and diacritics (the dot on i/j, ".",
+    /// ":", etc). Its size is the node's thickness ("outer"/⌘↑↓ or the thickness handle drag).
+    ///
+    /// Selects every node of the just-finished stroke — ready for an immediate group edit (⌫ to
+    /// delete the whole thing, arrows to nudge it) without having to marquee it first; Esc clears
+    /// it, Tab/⇧Tab step to the next/previous node as usual.
     func finishDrawing() {
-        if let pathID = drawingPathID {
-            if let pi = glyph.pathIndex(pathID), glyph.paths[pi].nodes.count < 2 {
-                mutateWorking { g in g.paths.removeAll { $0.id == pathID } }
-            }
-        }
+        let pathID = drawingPathID
         drawingPathID = nil
         if working != nil { commit("Draw Path") }
+        if let pathID { selectAllNodes(inPath: pathID) }
         needsDisplay = true
     }
 
@@ -213,9 +249,14 @@ extension GlyphCanvasView {
     }
 
     func deleteSelection() {
-        guard editor.mode == .skeleton, drawingPathID == nil, let sel = selection else { return }
-        mutateWorking { g in g.deleteNode(sel.pathID, sel.nodeID) }
+        guard editor.mode == .combo, drawingPathID == nil, let sel = selection else { return }
+        let anchor = NodeRef(pathID: sel.pathID, nodeID: sel.nodeID)
+        let refs = moveGroup(anchor: anchor)
+        mutateWorking { g in
+            for ref in refs { g.deleteNode(ref.pathID, ref.nodeID) }
+        }
         selection = nil
+        multiSelection = []
         commit("Delete Node")
     }
 
@@ -236,12 +277,17 @@ extension GlyphCanvasView {
             // `selection` still points at whatever was last selected before drawing started, not
             // the node being drawn, so "is there a selection" isn't the right test while drawing.
             if let pathID = drawingPathID {
-                // Placed relative to the just-created node, not the mouse's (possibly stale, or
-                // never-set) hover position — otherwise repeated presses without moving the mouse
-                // all land on the same point and the path stalls after one node (identical
-                // consecutive points make `continuePath` finish the stroke instead of extending it).
                 guard let pi = glyph.pathIndex(pathID), let last = glyph.paths[pi].nodes.last else { return }
-                let step = flags.contains(.shift) || editor.halfSnap ? 0.5 : 1.0
+                // Check close/join against the last node's *current* position first — arrow keys
+                // may have nudged it onto the path's own start (close) or another path's endpoint
+                // (join), the same targets a mouse click would detect there.
+                if continuePath(pathID, toPx(last.p), last.p, checkOnly: true) { return }
+                // Otherwise place a new node relative to the just-created one, not the mouse's
+                // (possibly stale, or never-set) hover position — otherwise repeated presses
+                // without moving the mouse all land on the same point and the path stalls after
+                // one node (identical consecutive points make `continuePath` finish the stroke
+                // instead of extending it).
+                let step = flags.contains(.shift) ? min(editor.snapStep, 0.5) : editor.snapStep
                 let gp = GridPoint(last.p.x + step, last.p.y)
                 continuePath(pathID, toPx(gp), gp)
                 // continuePath's default branch (plain "add a node") only sets up a .pen drag for
@@ -250,7 +296,10 @@ extension GlyphCanvasView {
                 // already committed internally.
                 commit("Draw Path")
             } else if let sel = selection {
-                mutateWorking { g in g.toggleNodeKind(sel.pathID, sel.nodeID) }
+                let refs = moveGroup(anchor: NodeRef(pathID: sel.pathID, nodeID: sel.nodeID))
+                mutateWorking { g in
+                    for ref in refs { g.toggleNodeKind(ref.pathID, ref.nodeID) }
+                }
                 commit("Toggle Node Kind")
             } else {
                 let m = doc.project.metrics
@@ -265,9 +314,17 @@ extension GlyphCanvasView {
             if drawingPathID != nil { deleteLastDrawnNode() } else { deleteSelection() }
         case KeyCode.left, KeyCode.right, KeyCode.up, KeyCode.down:
             let (ddx, ddy) = Self.arrowDelta(event.keyCode)
-            let step = editor.halfSnap ? 0.5 : 1.0
+            let step = editor.snapStep
             let dx = ddx * step, dy = ddy * step
-            if flags.contains(.shift), let t = currentEditableNode() {
+            // Nothing selected and no stroke in progress: arrows move the "phantom" cursor
+            // (`hover`, the same point the dashed preview line and Space's placement already use)
+            // instead of nudging a node — so you can position where the next Space-placed node
+            // will land using only the keyboard, the same way clicking there would.
+            if currentEditableNode() == nil {
+                let base = hover ?? GridPoint(0, 0)
+                hover = GridPoint(base.x + dx, base.y + dy)
+                needsDisplay = true
+            } else if flags.contains(.shift), let t = currentEditableNode() {
                 setSymmetricCurve(t.pathID, t.nodeID, dx: dx, dy: dy)
             } else if Self.isLeftOption(flags) { nudgeSelectedNode(dx: dx, dy: dy, handle: .cIn) }
             else if Self.isRightOption(flags) { nudgeSelectedNode(dx: dx, dy: dy, handle: .cOut) }
@@ -279,7 +336,7 @@ extension GlyphCanvasView {
     /// The node keyboard commands act on: the one being drawn right now if a stroke is in
     /// progress (its last node — `selection` is stale during drawing, still pointing at whatever
     /// was selected before), otherwise the explicit selection.
-    private func currentEditableNode() -> (pathID: UUID, nodeID: UUID)? {
+    func currentEditableNode() -> (pathID: UUID, nodeID: UUID)? {
         if let pathID = drawingPathID, let pi = glyph.pathIndex(pathID), let last = glyph.paths[pi].nodes.last {
             return (pathID, last.id)
         }
@@ -290,12 +347,12 @@ extension GlyphCanvasView {
     /// with half-grid snap on). A handle with no position yet (nil, resting at the node) starts
     /// from the node itself. Uses `currentEditableNode()`, not the raw selection, so the node just
     /// placed by Space mid-stroke (where `selection` is stale) can be nudged onto a grid point
-    /// without touching the mouse. A plain move (`handle == nil`) carries the whole multi-selection
-    /// along together if the node being nudged is part of one.
+    /// without touching the mouse. Applies to the whole multi-selection if the node being nudged
+    /// is part of one, same as a plain move.
     private func nudgeSelectedNode(dx: Double, dy: Double, handle: HandleKey?) {
         guard let sel = currentEditableNode() else { return }
         let anchor = NodeRef(pathID: sel.pathID, nodeID: sel.nodeID)
-        let refs = handle == nil ? moveGroup(anchor: anchor) : [anchor]
+        let refs = moveGroup(anchor: anchor)
         mutateWorking { g in
             for ref in refs {
                 g.withNode(ref.pathID, ref.nodeID) { nd in
@@ -325,13 +382,16 @@ extension GlyphCanvasView {
     /// The result is re-snapped to the grid rather than just offset by a whole step, since an
     /// existing handle may already sit off-grid (e.g. rotated via a mouse drag).
     private func setSymmetricCurve(_ pathID: UUID, _ nodeID: UUID, dx: Double, dy: Double) {
+        let refs = moveGroup(anchor: NodeRef(pathID: pathID, nodeID: nodeID))
         mutateWorking { g in
-            g.withNode(pathID, nodeID) { nd in
-                nd.kind = .smooth
-                let baseOut = nd.cOut ?? nd.p
-                let baseIn = nd.cIn ?? nd.p
-                nd.cOut = snap(GridPoint(baseOut.x + dx, baseOut.y + dy), fine: false)
-                nd.cIn = snap(GridPoint(baseIn.x - dx, baseIn.y - dy), fine: false)
+            for ref in refs {
+                g.withNode(ref.pathID, ref.nodeID) { nd in
+                    nd.kind = .smooth
+                    let baseOut = nd.cOut ?? nd.p
+                    let baseIn = nd.cIn ?? nd.p
+                    nd.cOut = snap(GridPoint(baseOut.x + dx, baseOut.y + dy), fine: false)
+                    nd.cIn = snap(GridPoint(baseIn.x - dx, baseIn.y - dy), fine: false)
+                }
             }
         }
         commit("Curve Node")
@@ -394,4 +454,62 @@ extension GlyphCanvasView {
             }
         }
     }
+
+    /// ⌥,/⌥./⌥;/⌥' — rotate or flip the selected node(s) as a rigid group, pivoting on the
+    /// bounding-box center of their positions (a lone selected node pivots on itself, so only its
+    /// own curve handles — skeleton and fill alike — turn or flip in place, not the node). Skeleton
+    /// points (`p`, `cIn`, `cOut`) are absolute grid positions, so they transform around the pivot
+    /// directly; a node's outer/inner fill-handle vectors are stored *relative* to it, so they
+    /// transform as directions only, no pivot involved. Only the nodes actually selected move —
+    /// an unselected neighbor sharing a segment with one keeps its own points where they are.
+    func transformSelection(_ transform: NodeTransform) {
+        guard let sel = selection else { return }
+        let refs = moveGroup(anchor: NodeRef(pathID: sel.pathID, nodeID: sel.nodeID))
+        guard !refs.isEmpty else { return }
+        var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
+        for ref in refs {
+            guard let nd = glyph.node(ref.pathID, ref.nodeID) else { continue }
+            minX = min(minX, nd.p.x); maxX = max(maxX, nd.p.x)
+            minY = min(minY, nd.p.y); maxY = max(maxY, nd.p.y)
+        }
+        guard minX.isFinite else { return }
+        let pivot = GridPoint((minX + maxX) / 2, (minY + maxY) / 2)
+        func vec(_ v: GridPoint) -> GridPoint {
+            switch transform {
+            case .rotateCCW: return GridPoint(-v.y, v.x)
+            case .rotateCW: return GridPoint(v.y, -v.x)
+            case .flipHorizontal: return GridPoint(-v.x, v.y)
+            case .flipVertical: return GridPoint(v.x, -v.y)
+            }
+        }
+        func point(_ p: GridPoint) -> GridPoint {
+            let d = vec(GridPoint(p.x - pivot.x, p.y - pivot.y))
+            return GridPoint(pivot.x + d.x, pivot.y + d.y)
+        }
+        mutateWorking { g in
+            for ref in refs {
+                g.withNode(ref.pathID, ref.nodeID) { nd in
+                    nd.p = point(nd.p)
+                    if let c = nd.cIn { nd.cIn = point(c) }
+                    if let c = nd.cOut { nd.cOut = point(c) }
+                    if var fh = nd.outer {
+                        fh.offset = vec(fh.offset)
+                        if let c = fh.cIn { fh.cIn = vec(c) }
+                        if let c = fh.cOut { fh.cOut = vec(c) }
+                        nd.outer = fh
+                    }
+                    if var fh = nd.inner {
+                        fh.offset = vec(fh.offset)
+                        if let c = fh.cIn { fh.cIn = vec(c) }
+                        if let c = fh.cOut { fh.cOut = vec(c) }
+                        nd.inner = fh
+                    }
+                }
+            }
+        }
+        commit("Transform Selection")
+    }
 }
+
+/// Rigid transforms `transformSelection` can apply to the selected node(s).
+enum NodeTransform { case rotateCCW, rotateCW, flipHorizontal, flipVertical }

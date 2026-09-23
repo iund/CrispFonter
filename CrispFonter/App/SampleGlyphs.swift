@@ -2,9 +2,8 @@ import Foundation
 
 /// A few pre-drawn glyphs (ported from the prototype) so a new document isn't empty air.
 enum SampleGlyphs {
-    private static func n(_ x: Double, _ y: Double, kind: NodeKind = .corner, cIn: GridPoint? = nil, cOut: GridPoint? = nil,
-                           angle: Double = 0, cap: Double = 0) -> Node {
-        Node(GridPoint(x, y), kind: kind, cIn: cIn, cOut: cOut).with { $0.angle = angle; $0.cap = cap }
+    private static func n(_ x: Double, _ y: Double, kind: NodeKind = .corner, cIn: GridPoint? = nil, cOut: GridPoint? = nil) -> Node {
+        Node(GridPoint(x, y), kind: kind, cIn: cIn, cOut: cOut)
     }
 
     private static func hint(_ spec: String) -> HintPoint {
@@ -60,11 +59,11 @@ enum SampleGlyphs {
 
         let c = glyph(UInt32(Character("c").asciiValue!), [
             SkeletonPath(nodes: [
-                n(6.5, 6.25, kind: .smooth, cOut: GridPoint(5.8, 7.6), angle: 30, cap: 0.25),
+                n(6.5, 6.25, kind: .smooth, cOut: GridPoint(5.8, 7.6)),
                 n(4, 8, kind: .smooth, cIn: GridPoint(5.5, 8), cOut: GridPoint(2.2, 8)),
                 n(1, 4, kind: .smooth, cIn: GridPoint(1, 6.2), cOut: GridPoint(1, 1.8)),
                 n(4, 0, kind: .smooth, cIn: GridPoint(2.2, 0), cOut: GridPoint(5.5, 0)),
-                n(6.5, 1.75, kind: .smooth, cIn: GridPoint(5.8, 0.4), angle: -30, cap: 0.25),
+                n(6.5, 1.75, kind: .smooth, cIn: GridPoint(5.8, 0.4)),
             ], closed: false),
         ], [(0, 1, "y"), (0, 2, "x"), (0, 3, "y")])
 

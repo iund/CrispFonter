@@ -8,13 +8,13 @@ enum Hinting {
     /// default (nearest) hint. Shared by the Hint-mode toolbar button and its ⇧⏎ shortcut.
     /// Returns the number of nodes hinted.
     @discardableResult
-    static func autoDetect(_ g: inout Glyph) -> Int {
+    static func autoDetect(_ g: inout Glyph, mode: SnapMode = .nearest) -> Int {
         var count = 0
         for path in g.paths {
             for (i, nd) in path.nodes.enumerated() {
                 let t = tangents(path, i)
                 func straight(_ v: GridPoint?) -> Bool { guard let v else { return false }; return abs(v.x) < 0.35 || abs(v.y) < 0.35 }
-                if straight(t.tin) || straight(t.tout) { g.hints[nd.id] = defaultHint(path, i); count += 1 }
+                if straight(t.tin) || straight(t.tout) { g.hints[nd.id] = defaultHint(path, i, mode: mode); count += 1 }
             }
         }
         return count
@@ -49,7 +49,7 @@ enum Hinting {
 
     /// x = "nearest" if any adjacent tangent is within ~20 deg of vertical; y likewise for horizontal.
     /// Neither -> both nearest.
-    static func defaultHint(_ path: SkeletonPath, _ i: Int) -> HintPoint {
+    static func defaultHint(_ path: SkeletonPath, _ i: Int, mode: SnapMode = .nearest) -> HintPoint {
         let t = tangents(path, i)
         var x = false, y = false
         for tt in [t.tin, t.tout] {
@@ -58,17 +58,15 @@ enum Hinting {
             if abs(tt.y) < 0.35 { y = true }
         }
         if !x && !y { x = true; y = true }
-        return HintPoint(x: x ? .nearest : nil, y: y ? .nearest : nil)
+        return HintPoint(x: x ? mode : nil, y: y ? mode : nil)
     }
 
-    /// The two stroke edges at a node, in grid units.
+    /// The two stroke edges at a node, in grid units — its explicit fill points if set, else the
+    /// derived (perpendicular-offset) position, exactly what's actually rendered there.
     static func edgesAt(_ path: SkeletonPath, _ i: Int, weight: Double) -> (GridPoint, GridPoint) {
         let nd = path.nodes[i]
-        let t = tangentAt(path, i)
-        let left = GridPoint(-t.y, t.x).rotated(degrees: nd.angle)
-        let hl = SkeletonGeometry.halfL(nd, weight: weight), hr = SkeletonGeometry.halfR(nd, weight: weight)
-        let e1 = GridPoint(nd.p.x + left.x * hl, nd.p.y + left.y * hl)
-        let e2 = GridPoint(nd.p.x - left.x * hr, nd.p.y - left.y * hr)
+        let e1 = SkeletonGeometry.fillPoint(of: nd, path: path, index: i, side: .left, weight: weight).point
+        let e2 = SkeletonGeometry.fillPoint(of: nd, path: path, index: i, side: .right, weight: weight).point
         return (e1, e2)
     }
 
@@ -101,12 +99,14 @@ enum Hinting {
         return r
     }
 
-    /// Round a pixel coordinate by mode: nearest, or forced toward negative / positive.
+    /// Round a pixel coordinate by mode: nearest, or forced toward negative / positive. `.outward`
+    /// only has meaning for a stem's *pair* of edges (see `GridFitting.stemAnchors`) — for a lone
+    /// point anchor there's no "away from center" to round toward, so it falls back to nearest.
     static func snapPx(_ v: Double, _ mode: SnapMode) -> Double {
         switch mode {
         case .positive: return (v - 1e-4).rounded(.up)
         case .negative: return (v + 1e-4).rounded(.down)
-        case .nearest: return v.rounded()
+        case .nearest, .outward: return v.rounded()
         }
     }
 }

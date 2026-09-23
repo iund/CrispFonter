@@ -15,10 +15,10 @@ final class ProjectDocument: ReferenceFileDocument, ObservableObject {
 
     static var readableContentTypes: [UTType] { [.crispProject] }
 
+    // A new document starts blank — no pre-drawn glyphs. The old seeded set ('a', 'n', 'l', etc.,
+    // from SampleGlyphs.seed) is saved to ~/Desktop/CrispFonter Sample Glyphs.crisp for reference.
     init() {
-        var p = FontProject.newDocument()
-        SampleGlyphs.seed(into: &p)
-        project = p
+        project = FontProject.newDocument()
     }
 
     init(configuration: ReadConfiguration) throws {

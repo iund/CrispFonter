@@ -86,7 +86,19 @@ extension GlyphCanvasView {
         doc.mutateGlyph(editor.currentScalar, "Toggle Complete", undoManager: undoManager) { $0.complete.toggle() }
     }
 
+    /// ⌘+arrow pans the canvas by the current grid-snap step — Metrics-mode-only (there's no
+    /// equivalent in Draw, where ⌘+arrow already means something else: nudging a fill handle).
+    private func panCanvas(_ event: NSEvent) -> Bool {
+        guard let (dx, dy) = Self.arrowName(event.keyCode) != nil ? Self.arrowDelta(event.keyCode) : nil else { return false }
+        let step = editor.snapStep
+        editor.panOffset.x += CGFloat(dx * step) * cell
+        editor.panOffset.y -= CGFloat(dy * step) * cell
+        needsDisplay = true
+        return true
+    }
+
     func metricsKeyDown(_ event: NSEvent, _ flags: NSEvent.ModifierFlags) {
+        if flags.contains(.command), panCanvas(event) { return }
         switch event.keyCode {
         case KeyCode.space: editor.showPix.toggle()
         case KeyCode.enter: toggleGlyphComplete()

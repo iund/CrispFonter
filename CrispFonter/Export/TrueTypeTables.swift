@@ -17,7 +17,7 @@ enum TrueTypeTables {
         w.u32(0); w.u32(now)
         w.i16(0); w.i16(Int16((Double(m.descender) * upc).rounded()))
         w.i16(Int16((Double(m.defaultAdvance) * upc).rounded())); w.i16(Int16((Double(m.ascender) * upc).rounded()))
-        w.u16(0)
+        w.u16(isBold(project.export) ? 0x0001 : 0) // macStyle: bit 0 = bold
         w.u16(8)
         w.i16(2)
         w.i16(indexToLocFormat)
@@ -58,13 +58,24 @@ enum TrueTypeTables {
         return w.data
     }
 
+    /// Style presets (Light/Regular/Bold, or any custom text the editable dropdown allows) map to
+    /// OS/2 weight class and the bold flags — matched case-insensitively so "Bold Italic" etc.
+    /// still registers as bold, without needing a separate structured weight field.
+    static func isBold(_ options: ExportOptions) -> Bool { options.styleName.lowercased().contains("bold") }
+    static func weightClass(_ options: ExportOptions) -> UInt16 {
+        let s = options.styleName.lowercased()
+        if s.contains("bold") { return 700 }
+        if s.contains("light") { return 300 }
+        return 400
+    }
+
     static func os2(project: FontProject, glyf: TrueTypeGlyf.Built) -> Data {
         var w = ByteWriter()
         let m = project.metrics, upc = project.unitsPerCell
         func px(_ v: Double) -> Int16 { Int16((v * upc).rounded()) }
         w.u16(4) // version
         w.i16(px(Double(m.defaultAdvance)))
-        w.u16(400); w.u16(5); w.u16(0) // weight, width, fsType
+        w.u16(weightClass(project.export)); w.u16(5); w.u16(0) // weight, width, fsType
         w.i16(px(0.6 * Double(m.defaultAdvance))); w.i16(px(0.7 * Double(m.capHeight))) // subscript size
         w.i16(0); w.i16(0) // subscript offset
         w.i16(px(0.6 * Double(m.defaultAdvance))); w.i16(px(0.7 * Double(m.capHeight))) // superscript size
@@ -72,10 +83,12 @@ enum TrueTypeTables {
         w.i16(px(0.05 * Double(m.capHeight))) // strikeout size
         w.i16(px(0.3 * Double(m.xHeight))) // strikeout position
         w.i16(0) // sFamilyClass
-        for _ in 0..<10 { w.u8(0) } // panose
+        // PANOSE: family kind 2 = Latin Text, so byte 3 (proportion) is meaningful; 9 = monospaced.
+        w.u8(2); w.u8(0); w.u8(0); w.u8(project.export.monospace ? 9 : 0)
+        for _ in 0..<6 { w.u8(0) }
         w.u32(1); w.u32(0); w.u32(0); w.u32(0) // ulUnicodeRange 1-4 (bit 0 = Basic Latin)
         w.ascii("NONE", 4)
-        w.u16(0x0040) // fsSelection: REGULAR
+        w.u16(isBold(project.export) ? 0x0020 : 0x0040) // fsSelection: BOLD or REGULAR
         w.u16(UInt16(FontProject.glyphOrder.dropFirst(2).min() ?? 0x20))
         w.u16(UInt16(FontProject.glyphOrder.max() ?? 0x7E))
         w.i16(px(Double(m.ascender)))
@@ -163,12 +176,12 @@ enum TrueTypeTables {
         return w.data
     }
 
-    static func post() -> Data {
+    static func post(_ options: ExportOptions) -> Data {
         var w = ByteWriter()
         w.u32(0x00030000)
         w.u32(0)
         w.i16(0); w.i16(0)
-        w.u32(1) // isFixedPitch: monospaced
+        w.u32(options.monospace ? 1 : 0) // isFixedPitch
         w.u32(0); w.u32(0); w.u32(0); w.u32(0)
         return w.data
     }

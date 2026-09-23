@@ -15,7 +15,7 @@ enum TrueTypeWriter {
             ("loca", TrueTypeTables.loca(glyf)),
             ("glyf", glyf.glyf),
             ("name", TrueTypeTables.name(project.export)),
-            ("post", TrueTypeTables.post()),
+            ("post", TrueTypeTables.post(project.export)),
             ("gasp", TrueTypeTables.gasp(project.export)),
         ]
         if project.export.includeHints {

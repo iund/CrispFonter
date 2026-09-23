@@ -52,9 +52,18 @@ enum GlyphHintProgram {
         wrapRounding(&p, mode: mode) { p in p.push(index); p.mdap(round: true) }
     }
 
-    /// Anchor one edge of a stem, then MIRP the other edge to the stem's width in `cvt `.
+    /// Anchor one edge of a stem, then MIRP the other edge to the stem's width in `cvt ` — except
+    /// `.outward`, which has no single "anchor + fixed width" story (the whole point is that the
+    /// width isn't fixed, both edges just round away from center), so it independently MDAPs each
+    /// edge instead, one with RDTG (floor) and one with RUTG (ceil).
     private static func touchStem(_ p: inout Program, left: Int?, right: Int?, v1: Double, v2: Double, mode: SnapMode, y: Bool, cvt: CVTTable, project: FontProject) -> Bool {
         guard let left, let right else { return false }
+        if mode == .outward {
+            let (loIdx, hiIdx) = v1 <= v2 ? (left, right) : (right, left)
+            wrapRounding(&p, mode: .negative) { p in p.push(loIdx); p.mdap(round: true) }
+            wrapRounding(&p, mode: .positive) { p in p.push(hiIdx); p.mdap(round: true) }
+            return true
+        }
         let width = max(1, Int((abs(v2 - v1)).rounded()))
         guard let widthCvt = cvt.widthCVTIndex(width) else { return false }
 
@@ -66,6 +75,7 @@ enum GlyphHintProgram {
             if y, zoneCVTIndex(v1, project: project, cvt: cvt) != nil { anchorIsV1 = true }
             else if y, zoneCVTIndex(v2, project: project, cvt: cvt) != nil { anchorIsV1 = false }
             else { anchorIsV1 = v1 <= v2 }
+        case .outward: anchorIsV1 = true // unreachable — handled above
         }
         let anchorIdx = anchorIsV1 ? left : right, otherIdx = anchorIsV1 ? right : left
         let anchorV = anchorIsV1 ? v1 : v2
@@ -80,11 +90,13 @@ enum GlyphHintProgram {
         return true
     }
 
+    /// `.outward` only reaches here (from `touchPoint`) for a lone point anchor, where "away from
+    /// center" isn't meaningful — falls back to plain nearest-rounding, same as `Hinting.snapPx`.
     private static func wrapRounding(_ p: inout Program, mode: SnapMode, _ body: (inout Program) -> Void) {
         switch mode {
         case .positive: p.rutg(); body(&p); p.rtg()
         case .negative: p.rdtg(); body(&p); p.rtg()
-        case .nearest: body(&p)
+        case .nearest, .outward: body(&p)
         }
     }
 
