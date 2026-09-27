@@ -25,6 +25,8 @@ final class EditorState: ObservableObject {
     /// more opaque when the skeleton's hidden so it reads clearly without the overlay competing
     /// with it. See `fillColor` and `GlyphCanvasView+Draw.drawFill`.
     @Published var showSkel = true
+    /// Hides the fill entirely (e.g. to inspect the skeleton/handles/hint overlay on their own).
+    @Published var showFill = true
     /// User-chosen fill color, shown at 50% alpha while the skeleton's visible and fully opaque
     /// once it's hidden.
     @Published var fillColor: Color = .purple

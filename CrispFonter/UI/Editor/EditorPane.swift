@@ -74,6 +74,11 @@ private struct ExportFieldsBar: View {
                 get: { doc.project.export.monospace },
                 set: { v in doc.mutate(undoManager: undoManager) { $0.export.monospace = v } }
             ))
+            Toggle("Simplify paths", isOn: Binding(
+                get: { doc.project.export.simplifyPaths },
+                set: { v in doc.mutate(undoManager: undoManager) { $0.export.simplifyPaths = v } }
+            ))
+            .help("Thin redundant points from curve-flattened outlines on export — mainly helps non-straight open-stroke end caps")
 
             Spacer()
 
@@ -155,6 +160,7 @@ private struct StatusBar: View {
                 Text("\(editor.pixPpem, specifier: "%.1f") pt").monospacedDigit()
             }
             ColorPicker("Fill color", selection: $editor.fillColor, supportsOpacity: false)
+            Toggle("Fill", isOn: $editor.showFill)
             Spacer()
             Text(editor.cursorPosText).foregroundStyle(.secondary)
             Text(pathInfoText).foregroundStyle(.secondary)

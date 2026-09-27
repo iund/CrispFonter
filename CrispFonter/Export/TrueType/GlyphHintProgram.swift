@@ -9,7 +9,7 @@ typealias NodePointIndex = [UUID: (left: Int?, right: Int?)]
 /// isn't explicitly touched is left to IUP.
 enum GlyphHintProgram {
     static func compile(glyph: Glyph, project: FontProject, cvt: CVTTable, pointForNode: NodePointIndex) -> Data {
-        guard !glyph.hints.isEmpty else { return Data() }
+        guard !glyph.hints.isEmpty || project.export.hintSideBearings else { return Data() }
         var p = Program()
         compileAxis(&p, glyph: glyph, project: project, cvt: cvt, pointForNode: pointForNode, y: true)
         compileAxis(&p, glyph: glyph, project: project, cvt: cvt, pointForNode: pointForNode, y: false)
@@ -29,23 +29,59 @@ enum GlyphHintProgram {
                 // at, or a stem meant to land on a zone after the nudge won't be recognized as one.
                 let bias = y ? project.verticalBias : 0
                 let v1 = (y ? e1.y : e1.x) + bias, v2 = (y ? e2.y : e2.x) + bias
-                if abs(v1 - v2) > 0.1 {
+                // Diagonal: the edge pair differs on *both* axes, so neither axis's own extent is
+                // this stem's true width — the existing stem math (below) would use that raw extent
+                // as if it were the whole width, on each axis independently, which is wrong on both.
+                // `hintDiagonalStems` swaps in plain independent point-rounding for just this case —
+                // correct and safe, if not as sharp as true perpendicular-to-stem hinting.
+                let otherDiff = y ? abs(e1.x - e2.x) : abs(e1.y - e2.y)
+                let isDiagonal = project.export.hintDiagonalStems && abs(v1 - v2) > 0.1 && otherDiff > 0.1
+                if isDiagonal {
+                    for point in [idx.left, idx.right].compactMap({ $0 }) {
+                        touchPoint(&p, index: point, at: (point == idx.left ? v1 : v2), mode: mode, y: y, cvt: cvt, project: project, overshootTolerance: 0.05)
+                        touchedAny = true
+                    }
+                } else if abs(v1 - v2) > 0.1 {
                     touchedAny = touchStem(&p, left: idx.left, right: idx.right, v1: v1, v2: v2, mode: mode, y: y, cvt: cvt, project: project) || touchedAny
                 } else {
+                    let tolerance = project.export.suppressOvershoot ? 0.3 : 0.05
                     for point in [idx.left, idx.right].compactMap({ $0 }) {
-                        touchPoint(&p, index: point, at: v1, mode: mode, y: y, cvt: cvt, project: project)
+                        touchPoint(&p, index: point, at: v1, mode: mode, y: y, cvt: cvt, project: project, overshootTolerance: tolerance)
                         touchedAny = true
                     }
                 }
             }
         }
+        if !y, project.export.hintSideBearings, let leftmost = leftmostPoint(glyph: glyph, project: project, pointForNode: pointForNode) {
+            p.push(leftmost); p.mdap(round: true)
+            touchedAny = true
+        }
         if touchedAny { p.iup(y: y) }
     }
 
-    /// Anchor a single point: MIAP to a zone's cvt entry if it sits on an alignment zone (y only),
-    /// otherwise MDAP, its rounding wrapped in RUTG/RDTG for a forced push direction.
-    private static func touchPoint(_ p: inout Program, index: Int, at v: Double, mode: SnapMode, y: Bool, cvt: CVTTable, project: FontProject) {
-        if y, let zoneIdx = zoneCVTIndex(v, project: project, cvt: cvt) {
+    /// The outline point index nearest the glyph's own left edge (minimum x across every node's
+    /// fill-boundary points), rounded to a whole pixel column so ink starts at a consistent offset
+    /// from the pen origin glyph to glyph. See `ExportOptions.hintSideBearings`.
+    private static func leftmostPoint(glyph: Glyph, project: FontProject, pointForNode: NodePointIndex) -> Int? {
+        var best: (index: Int, x: Double)?
+        for path in glyph.paths {
+            for (i, node) in path.nodes.enumerated() {
+                guard let idx = pointForNode[node.id] else { continue }
+                let (e1, e2) = Hinting.edgesAt(path, i, weight: project.defaultWeight)
+                for (x, pointIdx) in [(e1.x, idx.left), (e2.x, idx.right)] {
+                    guard let pointIdx else { continue }
+                    if best == nil || x < best!.x { best = (pointIdx, x) }
+                }
+            }
+        }
+        return best?.index
+    }
+
+    /// Anchor a single point: MIAP to a zone's cvt entry if it sits within `overshootTolerance` of
+    /// an alignment zone (y only), otherwise MDAP, its rounding wrapped in RUTG/RDTG for a forced
+    /// push direction.
+    private static func touchPoint(_ p: inout Program, index: Int, at v: Double, mode: SnapMode, y: Bool, cvt: CVTTable, project: FontProject, overshootTolerance: Double) {
+        if y, let zoneIdx = zoneCVTIndex(v, project: project, cvt: cvt, tolerance: overshootTolerance) {
             p.push([index, zoneIdx]); p.miap(round: true)
             return
         }
@@ -72,15 +108,15 @@ enum GlyphHintProgram {
         case .positive: anchorIsV1 = v1 > v2   // push the high edge outward; it's the anchor
         case .negative: anchorIsV1 = v1 < v2   // push the low edge outward; it's the anchor
         case .nearest:
-            if y, zoneCVTIndex(v1, project: project, cvt: cvt) != nil { anchorIsV1 = true }
-            else if y, zoneCVTIndex(v2, project: project, cvt: cvt) != nil { anchorIsV1 = false }
+            if y, zoneCVTIndex(v1, project: project, cvt: cvt, tolerance: 0.05) != nil { anchorIsV1 = true }
+            else if y, zoneCVTIndex(v2, project: project, cvt: cvt, tolerance: 0.05) != nil { anchorIsV1 = false }
             else { anchorIsV1 = v1 <= v2 }
         case .outward: anchorIsV1 = true // unreachable — handled above
         }
         let anchorIdx = anchorIsV1 ? left : right, otherIdx = anchorIsV1 ? right : left
         let anchorV = anchorIsV1 ? v1 : v2
 
-        if y, let zoneIdx = zoneCVTIndex(anchorV, project: project, cvt: cvt) {
+        if y, let zoneIdx = zoneCVTIndex(anchorV, project: project, cvt: cvt, tolerance: 0.05) {
             p.push([anchorIdx, zoneIdx]); p.miap(round: true)
         } else {
             wrapRounding(&p, mode: mode) { p in p.push(anchorIdx); p.mdap(round: true) }
@@ -100,8 +136,8 @@ enum GlyphHintProgram {
         }
     }
 
-    private static func zoneCVTIndex(_ gridValue: Double, project: FontProject, cvt: CVTTable) -> Int? {
-        for z in project.metrics.zones where abs(z - gridValue) < 0.05 { return cvt.zoneCVTIndex(Int(z.rounded())) }
+    private static func zoneCVTIndex(_ gridValue: Double, project: FontProject, cvt: CVTTable, tolerance: Double) -> Int? {
+        for z in project.metrics.zones where abs(z - gridValue) < tolerance { return cvt.zoneCVTIndex(Int(z.rounded())) }
         return nil
     }
 }

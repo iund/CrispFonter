@@ -195,6 +195,31 @@ struct ExportOptions: Codable, Equatable {
     /// Flags the exported font as fixed-pitch (`post.isFixedPitch` + PANOSE proportion) — some
     /// IDEs only list monospace fonts in their font picker, and check this rather than measuring.
     var monospace = true
+    /// Thins out redundant points from the dense curve-flattened outline before writing `glyf` —
+    /// mainly useful for non-straight open-stroke end caps, whose curved join can flatten to a lot
+    /// of nearly-collinear points. Never removes a point a hint instruction references. See
+    /// `PathSimplify`.
+    var simplifyPaths = false
+    /// Rounds the leftmost hinted edge of each glyph to a whole pixel column on export, so ink
+    /// starts at a consistent offset from the pen origin instead of drifting glyph to glyph.
+    var hintSideBearings = false
+    /// Widens zone matching for lone hinted points (not stems) so a deliberate design overshoot —
+    /// the bottom of a round bowl dipping slightly past the baseline, say — snaps flush to the
+    /// zone instead of jittering between rounding up or down at small sizes. Always-on suppression,
+    /// not ppem-conditional preservation above some size.
+    var suppressOvershoot = false
+    /// Bumps every narrow hinted stem's `cvt` width up by this many font design grid-units (0 =
+    /// off), so thin strokes stay a hair heavier once grid-fit or ClearType-smoothed. It's a flat
+    /// bump, not tapered by ppem — and native macOS text rendering ignores hint bytecode entirely,
+    /// so this only affects Windows/FreeType-style hinted rendering, not Quartz's own antialiasing.
+    var stemDarkenAmount: Double = 0
+    /// A hinted node whose two edges aren't axis-aligned (a diagonal stroke) was, until this,
+    /// silently mis-hinted — its raw x/y extents used as if they were a straight stem's width on
+    /// each axis independently, both usually wrong. With this on, such a node's edges are instead
+    /// each grid-fit as plain points on both axes — correct and safe, though it just cleans up the
+    /// diagonal's endpoints rather than truly preserving its stroke width like a real projection-
+    /// vector stem hint would.
+    var hintDiagonalStems = false
 
     init() {}
 
@@ -210,6 +235,11 @@ struct ExportOptions: Codable, Equatable {
         familyName = try c.decodeIfPresent(String.self, forKey: .familyName) ?? "Crisp Mono"
         styleName = try c.decodeIfPresent(String.self, forKey: .styleName) ?? "Regular"
         monospace = try c.decodeIfPresent(Bool.self, forKey: .monospace) ?? true
+        simplifyPaths = try c.decodeIfPresent(Bool.self, forKey: .simplifyPaths) ?? false
+        hintSideBearings = try c.decodeIfPresent(Bool.self, forKey: .hintSideBearings) ?? false
+        suppressOvershoot = try c.decodeIfPresent(Bool.self, forKey: .suppressOvershoot) ?? false
+        stemDarkenAmount = try c.decodeIfPresent(Double.self, forKey: .stemDarkenAmount) ?? 0
+        hintDiagonalStems = try c.decodeIfPresent(Bool.self, forKey: .hintDiagonalStems) ?? false
     }
 }
 

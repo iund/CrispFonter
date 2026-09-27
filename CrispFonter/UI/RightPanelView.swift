@@ -110,12 +110,10 @@ private struct RendererStripView: View {
             let img = BitmapImages.nsImage(BitmapImages.actualSize(bmp, theme: theme))
             pixelImage(img, width: Double(bmp.w * zoom), height: Double(bmp.h * zoom))
                 .background(theme.swiftUIColor)
-                .border(Color.secondary.opacity(0.3))
         } else {
             let img = BitmapImages.nsImage(BitmapImages.zoomed(bmp, theme: theme))
             pixelImage(img, width: Double(bmp.w * 3) * Double(zoom) / 3, height: Double(bmp.h) * Double(zoom))
                 .background(theme.swiftUIColor)
-                .border(Color.secondary.opacity(0.3))
         }
     }
 
@@ -130,7 +128,6 @@ private struct RendererStripView: View {
         let zoom = max(3, 72 / max(h, 1))
         return pixelImage(img, width: Double(w * zoom), height: Double(h * zoom))
             .background(theme.swiftUIColor)
-            .border(Color.secondary.opacity(0.3))
     }
 
     private func referenceImage(text: String, font familyName: String, size: Double, w: Int, h: Int, base: Int, theme: BitmapImages.Theme) -> NSImage? {

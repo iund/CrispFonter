@@ -17,10 +17,18 @@ enum HintedGlyphBuilder {
         var pointForNode: NodePointIndex = [:]
         var globalIndex = 0
         for (ci, contour) in outline.contours.enumerated() {
+            var allPoints = contour.allPoints
+            var contourTags = tags[ci]
+            if project.export.simplifyPaths {
+                let protectedIndices = Set(contourTags.indices.filter { contourTags[$0] != nil })
+                let (simplified, kept) = PathSimplify.simplify(allPoints, protected: protectedIndices, tolerance: 0.01)
+                allPoints = simplified
+                contourTags = kept.map { contourTags[$0] }
+            }
             var pts: [(Int, Int)] = []
-            for (pi, point) in contour.allPoints.enumerated() {
+            for (pi, point) in allPoints.enumerated() {
                 pts.append((Int((point.x * upc).rounded()), Int(((point.y + bias) * upc).rounded())))
-                if let tag = tags[ci][pi] {
+                if let tag = contourTags[pi] {
                     var entry = pointForNode[tag.nodeID] ?? (nil, nil)
                     if tag.side == .left { entry.left = globalIndex } else { entry.right = globalIndex }
                     pointForNode[tag.nodeID] = entry

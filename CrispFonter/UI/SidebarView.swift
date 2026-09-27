@@ -8,8 +8,6 @@ struct SidebarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                GlyphGridView(doc: doc, editor: editor)
-
                 Section("Metrics (grid units)") {
                     metricRow("Ascender", \.ascender, range: 0...20)
                     metricRow("Cap height", \.capHeight, range: 0...20)
@@ -68,7 +66,37 @@ struct SidebarView: View {
                     }
                     Text("Above this size the exported font's prep program switches instructions off.")
                         .font(.caption).foregroundStyle(.secondary)
+
+                    Toggle("Hint side bearings", isOn: Binding(
+                        get: { doc.project.export.hintSideBearings },
+                        set: { v in doc.mutate(undoManager: undoManager) { $0.export.hintSideBearings = v } }
+                    ))
+                    .help("Rounds each glyph's leftmost edge to a whole pixel so ink starts at a consistent offset.")
+
+                    Toggle("Suppress overshoot", isOn: Binding(
+                        get: { doc.project.export.suppressOvershoot },
+                        set: { v in doc.mutate(undoManager: undoManager) { $0.export.suppressOvershoot = v } }
+                    ))
+                    .help("Snaps a hinted point near a zone flush to it, even with deliberate design overshoot.")
+
+                    Toggle("Hint diagonal stems", isOn: Binding(
+                        get: { doc.project.export.hintDiagonalStems },
+                        set: { v in doc.mutate(undoManager: undoManager) { $0.export.hintDiagonalStems = v } }
+                    ))
+                    .help("Grid-fits a diagonal edge's endpoints instead of (mis-)treating it as an axis-aligned stem.")
+
+                    HStack {
+                        Text("Stem darken")
+                        Slider(value: Binding(
+                            get: { doc.project.export.stemDarkenAmount },
+                            set: { v in doc.mutate(undoManager: undoManager) { $0.export.stemDarkenAmount = v } }
+                        ), in: 0...1, step: 0.1)
+                        Text(String(format: "%.1f", doc.project.export.stemDarkenAmount)).monospacedDigit().frame(width: 28)
+                    }
+                    .help("Bumps thin hinted stems' cvt width — helps grid-fit and ClearType, invisible on macOS (it ignores hint bytecode).")
                 }
+
+                GlyphGridView(doc: doc, editor: editor)
             }
             .padding(12)
         }
@@ -115,7 +143,9 @@ private struct Section<Content: View>: View {
 struct GlyphGridView: View {
     @ObservedObject var doc: ProjectDocument
     @ObservedObject var editor: EditorState
+    @FocusState private var gridFocused: Bool
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 6)
+    private static let columnCount = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -126,6 +156,27 @@ struct GlyphGridView: View {
                 }
             }
         }
+        .padding(4)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(gridFocused ? Color.accentColor.opacity(0.6) : .clear, lineWidth: 2))
+        // One tab stop for the whole grid, rather than one per glyph — once it has focus, arrow
+        // keys move the current glyph selection (the accent-colored cell) instead.
+        .contentShape(Rectangle())
+        .focusable()
+        .focused($gridFocused)
+        .onKeyPress(.leftArrow) { moveSelection(by: -1) }
+        .onKeyPress(.rightArrow) { moveSelection(by: 1) }
+        .onKeyPress(.upArrow) { moveSelection(by: -Self.columnCount) }
+        .onKeyPress(.downArrow) { moveSelection(by: Self.columnCount) }
+    }
+
+    /// Sets `currentScalar` directly rather than going through `selectGlyph`, which also hands
+    /// keyboard focus to the canvas — that would end arrow-key navigation after a single step.
+    private func moveSelection(by delta: Int) -> KeyPress.Result {
+        guard let idx = FontProject.glyphOrder.firstIndex(of: editor.currentScalar) else { return .ignored }
+        let newIdx = idx + delta
+        guard FontProject.glyphOrder.indices.contains(newIdx) else { return .handled }
+        editor.currentScalar = FontProject.glyphOrder[newIdx]
+        return .handled
     }
 }
 

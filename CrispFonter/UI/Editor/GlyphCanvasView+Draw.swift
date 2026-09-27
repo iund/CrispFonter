@@ -26,7 +26,7 @@ extension GlyphCanvasView {
         drawGuides(ctx)
         if editor.mode == .metrics { drawMetricHandles(ctx) }
         if editor.mode == .hint { drawDerivedStems(ctx) }
-        drawFill(ctx)
+        if editor.showFill { drawFill(ctx) }
         if editor.showSkel { drawSkeletonAndModeOverlays(ctx) }
         if editor.mode == .metrics && cmdHeld { drawPanHint(ctx) }
     }
@@ -46,7 +46,12 @@ extension GlyphCanvasView {
         let font = NSFont(name: doc.project.referenceFontName, size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: dark ? NSColor.black : NSColor.white]
         let baseline = toPx(GridPoint(0, 0))
-        String(Character(scalar)).draw(at: NSPoint(x: baseline.x, y: baseline.y - font.ascender), withAttributes: attrs)
+        // The reference font's ascender is usually taller than this project's own glyph metrics,
+        // so at the glyph's normal vertical position its top can land under the toolbar bars
+        // stacked above the canvas (see `EditorPane`) — clamp so it never draws above them.
+        let topInset: CGFloat = 44
+        let y = max(baseline.y - font.ascender, topInset)
+        String(Character(scalar)).draw(at: NSPoint(x: baseline.x, y: y), withAttributes: attrs)
     }
 
     /// ⌘ held in Metrics mode: four arrows at the edges of the canvas indicating the canvas can be
@@ -170,7 +175,7 @@ extension GlyphCanvasView {
     }
 
     private func drawDerivedStems(_ ctx: CGContext) {
-        let d = Hinting.derivedHints(glyph, weight: weight)
+        let d = Hinting.derivedHints(glyph, weight: weight, diagonalAware: doc.project.export.hintDiagonalStems)
         ctx.setLineDash(phase: 0, lengths: [5, 3]); ctx.setLineWidth(1)
         for st in d.v {
             let x0 = toPx(GridPoint(st.lo, 0)).x, x1 = toPx(GridPoint(st.hi, 0)).x
@@ -191,10 +196,10 @@ extension GlyphCanvasView {
         ctx.setLineDash(phase: 0, lengths: [])
     }
 
-    /// The fill is always shown (there's no toggle for it anymore) — hiding the skeleton, whether
-    /// via its persistent toggle or momentarily by holding Fn (see `drawSkeletonAndModeOverlays`),
-    /// instead makes the fill itself read more clearly by going fully opaque, rather than leaving
-    /// an empty canvas with nothing to look at.
+    /// Gated by `editor.showFill` in `draw(_:)`. Hiding the skeleton, whether via its persistent
+    /// toggle or momentarily by holding Fn (see `drawSkeletonAndModeOverlays`), makes the fill
+    /// itself read more clearly by going fully opaque, rather than leaving an empty canvas with
+    /// nothing to look at.
     private func drawFill(_ ctx: CGContext) {
         let alpha = (editor.showSkel && !fnHeld) ? 0.5 : 1.0
         ctx.setFillColor(NSColor(editor.fillColor).withAlphaComponent(alpha).cgColor)

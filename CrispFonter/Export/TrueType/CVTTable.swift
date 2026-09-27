@@ -12,10 +12,15 @@ struct CVTTable {
         zoneIndex[gridHeight] = values.count
         values.append(Int((Double(gridHeight) * unitsPerCell).rounded()))
     }
-    mutating func addWidth(_ gridWidth: Int, unitsPerCell: Double) {
-        guard widthIndex[gridWidth] == nil else { return }
-        widthIndex[gridWidth] = values.count
-        values.append(Int((Double(gridWidth) * unitsPerCell).rounded()))
+    /// `key` is the plain rounded stem width in grid units — what `GlyphHintProgram.touchStem`
+    /// looks a stem's cvt entry up by, from its own live-computed width — while `storedGridWidth`
+    /// is what's actually written to the table, which stem darkening (see `CVTBuilder`) may have
+    /// bumped up a bit; keeping the lookup key undarkened is what lets a plain-width stem still
+    /// find its (now slightly wider) entry.
+    mutating func addWidth(_ key: Int, storedGridWidth: Double, unitsPerCell: Double) {
+        guard widthIndex[key] == nil else { return }
+        widthIndex[key] = values.count
+        values.append(Int((storedGridWidth * unitsPerCell).rounded()))
     }
     func zoneCVTIndex(_ gridHeight: Int) -> Int? { zoneIndex[gridHeight] }
     func widthCVTIndex(_ gridWidth: Int) -> Int? { widthIndex[gridWidth] }
@@ -36,10 +41,21 @@ enum CVTBuilder {
         for scalar in FontProject.glyphOrder {
             let glyph = project.glyph(for: scalar)
             let d = Hinting.derivedHints(glyph, weight: project.defaultWeight)
-            for st in d.v + d.h { table.addWidth(roundedWidth(st), unitsPerCell: project.unitsPerCell) }
+            for st in d.v + d.h {
+                let key = roundedWidth(st)
+                let darkened = darkenedWidth(key, amount: project.export.stemDarkenAmount)
+                table.addWidth(key, storedGridWidth: darkened, unitsPerCell: project.unitsPerCell)
+            }
         }
         return table
     }
 
     private static func roundedWidth(_ st: Hinting.Stem) -> Int { max(1, Int((st.hi - st.lo).rounded())) }
+
+    /// `key`'s width, plus a flat `amount` grid-units of stem darkening (see
+    /// `ExportOptions.stemDarkenAmount`) — applied only up to a 3-grid-unit stem, so a thin hairline
+    /// gets bulked up without also fattening already-heavy strokes.
+    private static func darkenedWidth(_ key: Int, amount: Double) -> Double {
+        Double(key) + (key <= 3 ? amount : 0)
+    }
 }

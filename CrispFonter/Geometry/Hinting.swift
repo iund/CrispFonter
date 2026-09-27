@@ -79,13 +79,22 @@ enum Hinting {
         var py: [PointAnchor] = []
     }
 
-    /// Derive stems / single anchors from every hinted node in a glyph.
-    static func derivedHints(_ glyph: Glyph, weight: Double) -> Derived {
+    /// Derive stems / single anchors from every hinted node in a glyph. `diagonalAware` matches
+    /// `GlyphHintProgram`'s `hintDiagonalStems`: a node whose edges differ on *both* axes isn't a
+    /// straight stem on either one, so each raw axis extent would be the wrong "width" — instead
+    /// both edge points are anchored independently, per axis, same as the export compiler does.
+    static func derivedHints(_ glyph: Glyph, weight: Double, diagonalAware: Bool = false) -> Derived {
         var r = Derived()
         for path in glyph.paths {
             for (i, nd) in path.nodes.enumerated() {
                 guard let hint = glyph.hints[nd.id] else { continue }
                 let (e1, e2) = edgesAt(path, i, weight: weight)
+                let isDiagonal = diagonalAware && abs(e1.x - e2.x) > 0.1 && abs(e1.y - e2.y) > 0.1
+                if isDiagonal {
+                    if let mode = hint.x { r.px.append(PointAnchor(at: e1.x, mode: mode)); r.px.append(PointAnchor(at: e2.x, mode: mode)) }
+                    if let mode = hint.y { r.py.append(PointAnchor(at: e1.y, mode: mode)); r.py.append(PointAnchor(at: e2.y, mode: mode)) }
+                    continue
+                }
                 if let mode = hint.x {
                     if abs(e1.x - e2.x) > 0.1 { r.v.append(Stem(lo: min(e1.x, e2.x), hi: max(e1.x, e2.x), mode: mode)) }
                     else { r.px.append(PointAnchor(at: nd.p.x, mode: mode)) }
